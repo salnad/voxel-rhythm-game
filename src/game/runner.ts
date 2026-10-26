@@ -127,6 +127,13 @@ export class PlayRunner {
         songTime: () => this.engine.timeAt(performance.now()),
         session: this.session,
         camera: CAMERA,
+        /** Everything the game plays, as a MediaStream (for recording demos without a sound card). */
+        tapAudio: () => {
+          const dest = this.engine.ctx.createMediaStreamDestination();
+          this.engine.output.connect(dest);
+          this.sfx.output.connect(dest);
+          return dest.stream;
+        },
       };
     }
   }

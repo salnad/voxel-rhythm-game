@@ -133,13 +133,14 @@ export const PARAM_SPECS: ParamSpec[] = [
   },
 ];
 
+/** A bright digi pluck: it also voices the SLASH lead in the INSTRUMENTS music mapping. */
 export const DEFAULT_PATCH: SynthPatch = {
   wavetable: 'basic-shapes',
-  wtPosition: 0,
-  unison: 1,
-  detune: 0.2,
-  cutoff: 0.5,
-  resonance: 0.1,
+  wtPosition: 0.6,
+  unison: 3,
+  detune: 0.4,
+  cutoff: 0.68,
+  resonance: 0.25,
   lfoRate: 2,
   lfoDepth: 0,
   envAttack: 0.01,
@@ -147,6 +148,7 @@ export const DEFAULT_PATCH: SynthPatch = {
 };
 
 export const PATCH_PRESETS: Record<string, Partial<SynthPatch>> = {
+  'DIGI PLUCK': { wtPosition: 0.6, unison: 3, detune: 0.4, cutoff: 0.68, resonance: 0.25 },
   'INIT SINE': { wtPosition: 0, unison: 1, detune: 0.2, cutoff: 0.5, resonance: 0.1 },
   SUPERSAW: { wtPosition: 0.66, unison: 5, detune: 0.55, cutoff: 0.75, resonance: 0.2 },
   'SQUARE GLITCH': { wtPosition: 1, unison: 3, detune: 0.9, cutoff: 0.6, resonance: 0.8 },

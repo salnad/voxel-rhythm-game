@@ -396,6 +396,16 @@ export function composeDemo(): CompEvent[] {
   return ev;
 }
 
+/** Harmony of a bar, for live accents that should sit in the song's key. */
+export function demoHarmony(bar: number): {
+  root808: number;
+  leadTones: number[];
+  chord: number[];
+} {
+  const ci = ((bar % 4) + 4) % 4;
+  return { root808: ROOTS_808[ci]!, leadTones: LEAD_TONES[ci]!, chord: CHORDS[ci]! };
+}
+
 /** Lead notes of one bar (beats relative to the bar), for live scheduling. */
 export function leadNotesByBar(events: readonly CompEvent[], bpb = 4): CompEvent[][] {
   const out: CompEvent[][] = [];

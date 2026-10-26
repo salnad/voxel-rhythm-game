@@ -99,8 +99,13 @@ keyboard / touch / autoplay
   tape-stop) until the bar line; the next measure always resyncs.
 - **Action → music layer** (`audio/musicLayers.ts`, registry in `config/musicMapping.ts`). How moves
   interact with the song is a swappable layer that listens to session events and drives the engine's
-  part gains, its music bus or its own sounds. Settings → "actions → music" picks one. The default
-  here just plays sword sounds.
+  part gains, its music bus or its own sounds. Settings → "actions → music" picks one:
+  - **INSTRUMENTS** (default, `audio/instrumentLayer.ts`, data in `config/instrumentMapping.ts`):
+    each move plays a part. BLOCK = 808, SLASH = lead, STAB = hats/perc, FLOURISH = vocal chops.
+    A hit plays an accent in that part's voice; a miss stutters the part, then mutes it (808, perc)
+    or glitches it (lead, vocals: chopped, low-passed, crushed) until that action's next cue. The
+    lead is synthesized live by your wavetable patch, so synth settings change how SLASH sounds.
+  - **SWORD SFX**: moves make sword sounds and the song plays as written.
 - **Audio clock** (`audio/musicEngine.ts`, `core/clockSync.ts`). Game time is the timeline position
   the player is _hearing_: AudioContext time (via `getOutputTimestamp`, falling back to
   `currentTime - outputLatency`), smoothed against `performance.now()`, minus the user's audio offset.
@@ -182,6 +187,7 @@ or paste the JSON with live validation, and playtest in the game.
 | DETUNE      | spreads the echo blades in angle and time, and boosts parry charge gain                                                                                    |
 | CUTOFF      | blade reach and glow, and STAB lunge distance                                                                                                              |
 | RES         | crit score bonus on PERFECT slashes, stabs and flourishes                                                                                                  |
+| (music)     | with the INSTRUMENTS mapping the same patch voices the song's lead and the SLASH accent                                                                    |
 | LFO / ENV   | data model only, not wired up yet                                                                                                                          |
 
 Presets are on the panel. The patch persists in localStorage.

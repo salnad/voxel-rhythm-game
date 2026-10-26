@@ -13,6 +13,11 @@ export class Sfx {
     this.out.connect(ctx.destination);
   }
 
+  /** Final output (for taps such as a recorder). */
+  get output(): AudioNode {
+    return this.out;
+  }
+
   set volume(v: number) {
     this.out.gain.value = v;
   }
