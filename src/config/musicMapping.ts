@@ -3,6 +3,7 @@
  * Settings lists them and the runner instantiates the chosen one. Add a mapping by writing
  * a MusicLayerFactory and registering it here.
  */
+import { productionFxLayer } from '../audio/fx/rack';
 import { instrumentLayer } from '../audio/instrumentLayer';
 import { hybridLayer, swordSfxLayer, type MusicLayerFactory } from '../audio/musicLayers';
 
@@ -23,6 +24,12 @@ export const MUSIC_MAPPINGS: Record<string, MusicMapping> = {
     label: 'SWORD SFX',
     description: 'Moves make sword sounds; the song plays as written.',
     create: swordSfxLayer,
+  },
+  fx: {
+    label: 'B · PRODUCER FX',
+    description:
+      'Each move is a mix-wide effect: BLOCK pumps, SLASH sweeps a filter, STAB stutters, FLOURISH lifts into the next bar. Misses fumble the effect.',
+    create: productionFxLayer,
   },
   hybrid: {
     label: 'C · HYBRID',
