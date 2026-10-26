@@ -246,6 +246,50 @@ input[type='range'] {
   padding: 8px 12px;
   border: 1px solid var(--g-dim);
 }
+.screen .mapping {
+  margin: 4px 0 14px;
+  padding: 8px 12px;
+  border: 1px solid var(--g-mid);
+}
+.screen .mapping-head {
+  color: var(--w);
+  letter-spacing: 2px;
+  margin-bottom: 6px;
+}
+.screen .mapping-opts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.screen .mapping-opt {
+  background: transparent;
+  color: var(--g);
+  border: 1px solid var(--g-mid);
+  font: inherit;
+  font-size: 12px;
+  letter-spacing: 1px;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+.screen .mapping-opt:hover,
+.screen .mapping-opt:focus-visible {
+  border-color: var(--g);
+  color: var(--w);
+  outline: none;
+}
+.screen .mapping-opt[aria-checked='true'] {
+  background: var(--g);
+  border-color: var(--g);
+  color: #000;
+}
+.screen .mapping-desc {
+  color: var(--g-mid);
+  font-size: 12px;
+  margin-top: 6px;
+}
+.screen .mapping .warn {
+  margin-top: 6px;
+}
 .screen .map .title {
   color: var(--w);
 }

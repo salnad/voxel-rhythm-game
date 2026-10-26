@@ -1,0 +1,150 @@
+# Playtest hub: builds main and every open same-repo PR under its own path on the gh-pages
+# branch, served by GitHub Pages at https://<owner>.github.io/<repo>/ (see README).
+# Merged PRs move to a "recently merged" section; PRs closed without merging are removed.
+name: Playtest hub
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    types: [opened, synchronize, reopened, edited, closed]
+  workflow_dispatch:
+
+concurrency:
+  group: playtest-hub-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # Hub tooling (scripts/hub) comes from the triggering commit; a closed PR uses main's.
+  TOOLING_REF: ${{ github.event.action == 'closed' && github.event.repository.default_branch || github.sha }}
+  # Path the site is served under. Change to / if the Pages site gets a custom domain.
+  HUB_BASE: /${{ github.event.repository.name }}/
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      targets: ${{ steps.plan.outputs.targets }}
+      count: ${{ steps.plan.outputs.count }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TOOLING_REF }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Read open PRs and the deployed versions
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/pulls?state=all&sort=updated&direction=desc&per_page=100" > "$RUNNER_TEMP/prs.json"
+          if git fetch -q --depth 1 origin gh-pages; then
+            git show FETCH_HEAD:versions.json > "$RUNNER_TEMP/deployed.json" || echo '[]' > "$RUNNER_TEMP/deployed.json"
+          else
+            echo '[]' > "$RUNNER_TEMP/deployed.json"
+          fi
+      - id: plan
+        env:
+          PRS_JSON: ${{ runner.temp }}/prs.json
+          DEPLOYED_JSON: ${{ runner.temp }}/deployed.json
+        run: |
+          targets=$(node scripts/hub/site.ts plan)
+          echo "$targets" | jq .
+          echo "targets=$targets" >> "$GITHUB_OUTPUT"
+          echo "count=$(echo "$targets" | jq length)" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: plan
+    if: needs.plan.outputs.count != '0'
+    name: build ${{ matrix.slot }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.plan.outputs.targets) }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TOOLING_REF }}
+          path: hub
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ matrix.ref }}
+          path: game
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: game/package-lock.json
+      - run: npm ci
+        working-directory: game
+      # vite build without tsc, so a PR with a type error is still playable (CI reports it).
+      - name: Build under ${{ env.HUB_BASE }}${{ matrix.slot }}/
+        working-directory: game
+        env:
+          VITE_BASE: ${{ env.HUB_BASE }}${{ matrix.slot }}/
+        run: npx vite build
+      - name: List music mappings
+        working-directory: game
+        run: |
+          npx tsx ../hub/scripts/hub/list-mappings.ts src/config/musicMapping.ts > "$RUNNER_TEMP/mappings.json" \
+            || echo '[]' > "$RUNNER_TEMP/mappings.json"
+          cat "$RUNNER_TEMP/mappings.json"
+      - name: Stamp version.json
+        env:
+          HUB_SLOT: ${{ matrix.slot }}
+          HUB_KIND: ${{ matrix.kind }}
+          HUB_PR: ${{ matrix.pr }}
+          HUB_TITLE: ${{ matrix.title }}
+          HUB_URL: ${{ matrix.url }}
+          HUB_BRANCH: ${{ matrix.branch }}
+          HUB_SHA: ${{ matrix.ref }}
+          HUB_MAPPINGS_JSON: ${{ runner.temp }}/mappings.json
+        run: |
+          export HUB_SUBJECT="$(git -C game log -1 --format=%s)"
+          node hub/scripts/hub/site.ts stamp game/dist
+          cat game/dist/version.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hub-${{ matrix.slot }}
+          path: game/dist
+          retention-days: 3
+
+  deploy:
+    needs: [plan, build]
+    # Runs even when nothing was built (PR closed) or one build failed; fork PRs can't publish.
+    if: >-
+      always() && needs.plan.result == 'success' &&
+      (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TOOLING_REF }}
+          path: hub
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/download-artifact@v4
+        if: needs.plan.outputs.count != '0'
+        with:
+          pattern: hub-*
+          path: incoming
+      - name: Publish to gh-pages
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HUB_MESSAGE: ${{ github.event_name }} ${{ github.event.action }} ${{ github.event.pull_request.number && format('#{0}', github.event.pull_request.number) || github.ref_name }} ${{ github.sha }}
+        run: bash hub/scripts/hub/publish.sh
+      - name: Summary
+        run: |
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          echo "Playtest hub: https://${owner}.github.io${HUB_BASE}" >> "$GITHUB_STEP_SUMMARY"

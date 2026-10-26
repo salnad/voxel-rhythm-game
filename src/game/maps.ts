@@ -53,7 +53,7 @@ export function proceduralSong(name: string): Promise<Record<string, AudioBuffer
 }
 
 export async function fetchMapIndex(): Promise<MapIndexEntry[]> {
-  const res = await fetch('/maps/index.json');
+  const res = await fetch(`${import.meta.env.BASE_URL}maps/index.json`);
   return (await res.json()) as MapIndexEntry[];
 }
 
@@ -92,7 +92,7 @@ export async function loadBuiltinMap(
   id: string,
   chartFile: string,
 ): Promise<LoadedMap> {
-  const base = `/maps/${encodeURIComponent(id)}/`;
+  const base = `${import.meta.env.BASE_URL}maps/${encodeURIComponent(id)}/`;
   const res = await fetch(base + chartFile);
   if (!res.ok) throw new MapLoadError(`Could not load ${base + chartFile} (${res.status})`);
   const { file, warnings } = checked(await res.text());

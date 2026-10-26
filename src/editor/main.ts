@@ -78,7 +78,9 @@ function status(msg: string) {
 
 $('b-demo').onclick = async () => {
   await player.resumeContext();
-  const r = parseChartText(await (await fetch('/maps/demo/chart.json')).text());
+  const r = parseChartText(
+    await (await fetch(`${import.meta.env.BASE_URL}maps/demo/chart.json`)).text(),
+  );
   if (!r.ok) return;
   await loadAudioFor(r.chart);
   setChart(r.chart);
@@ -157,7 +159,7 @@ $('b-test').onclick = async () => {
   if (!r.ok) return;
   if (r.chart.audio.file && !audioBytes) return status('load the audio file first');
   await saveHandoff(text.value, audioBytes);
-  window.open('/?map=editor', '_blank');
+  window.open(`${import.meta.env.BASE_URL}?map=editor`, '_blank');
 };
 
 // ---------------------------------------------------------------- playback

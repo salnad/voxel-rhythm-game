@@ -3,7 +3,8 @@ import { SongPlayer } from './audio/songPlayer';
 import { PLAYER } from './config/gameplay';
 import { ACTIONS } from './chart/types';
 import { ACTION_SPECS } from './config/actions';
-import { MUSIC_MAPPINGS } from './config/musicMapping';
+import { chooseMapping, urlWithMapping } from './config/mappingChoice';
+import { DEFAULT_MUSIC_MAPPING, MUSIC_MAPPINGS } from './config/musicMapping';
 import { KEY_PRESETS, keyLabel, loadSettings, saveSettings, type Settings } from './core/settings';
 import {
   fetchMapIndex,
@@ -24,6 +25,28 @@ const overlay = $('overlay');
 const params = new URLSearchParams(location.search);
 
 let settings: Settings = loadSettings();
+/** The saved mapping. `settings.musicMapping` holds what plays, which `?mapping=` can override. */
+let savedMapping = settings.musicMapping;
+const initialMapping = chooseMapping(
+  params.get('mapping'),
+  savedMapping,
+  MUSIC_MAPPINGS,
+  DEFAULT_MUSIC_MAPPING,
+);
+settings = { ...settings, musicMapping: initialMapping.key };
+let unknownMapping = initialMapping.unknown;
+
+function persist() {
+  saveSettings({ ...settings, musicMapping: savedMapping });
+}
+
+function setMapping(key: string) {
+  settings = { ...settings, musicMapping: key };
+  savedMapping = key;
+  unknownMapping = null;
+  persist();
+  history.replaceState(null, '', urlWithMapping(location.href, key));
+}
 const player = new SongPlayer();
 const sfx = new Sfx(player.ctx);
 const rain = new DigitalRain($('rain'));
@@ -65,6 +88,35 @@ const esc = (s: string) => s.replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
 
 // ------------------------------------------------------------------ menu
 
+function mappingSelector(): string {
+  const current = musicMappingLabel(settings.musicMapping);
+  return `<div class="mapping" role="radiogroup" aria-label="actions to music">
+      <div class="mapping-head">ACTIONS → MUSIC</div>
+      <div class="mapping-opts">${Object.entries(MUSIC_MAPPINGS)
+        .map(
+          ([k, m]) =>
+            `<button class="mapping-opt" role="radio" data-mapping="${esc(k)}" aria-checked="${k === settings.musicMapping}" title="${esc(m.description)}">${esc(m.label)}</button>`,
+        )
+        .join('')}</div>
+      <div class="mapping-desc">${esc(MUSIC_MAPPINGS[settings.musicMapping]?.description ?? '')}</div>
+      ${unknownMapping ? `<div class="warn">This version has no "${esc(unknownMapping)}" mapping, so it plays ${esc(current)}.</div>` : ''}
+    </div>`;
+}
+
+function musicMappingLabel(key: string): string {
+  return MUSIC_MAPPINGS[key]?.label ?? key;
+}
+
+function bindMappingSelector(el: HTMLElement) {
+  el.querySelectorAll<HTMLButtonElement>('button[data-mapping]').forEach((b) => {
+    b.onclick = () => {
+      setMapping(b.dataset.mapping!);
+      el.querySelector('.mapping')!.outerHTML = mappingSelector();
+      bindMappingSelector(el);
+    };
+  });
+}
+
 async function menu(): Promise<void> {
   screen = 'menu';
   let maps: MapIndexEntry[] = [];
@@ -76,6 +128,7 @@ async function menu(): Promise<void> {
   const el = show(`
     <h1>VOXEL//RHYTHM</h1>
     <div class="sub">one enemy at a time. four keys. every key is a sword move.</div>
+    ${mappingSelector()}
     <div class="maps">
       ${maps
         .map(
@@ -109,15 +162,16 @@ async function menu(): Promise<void> {
   el.querySelectorAll<HTMLButtonElement>('button[data-map]').forEach((b) => {
     b.onclick = () => playBuiltin(b.dataset.map!, b.dataset.file!);
   });
+  bindMappingSelector(el);
   $<HTMLInputElement>('c-auto').onchange = (e) =>
     (autoplay = (e.target as HTMLInputElement).checked);
   $<HTMLInputElement>('c-nofail').onchange = (e) => {
     settings = { ...settings, noFail: (e.target as HTMLInputElement).checked };
-    saveSettings(settings);
+    persist();
   };
   $('b-settings').onclick = settingsScreen;
   $('b-cal').onclick = calibrate;
-  $('b-editor').onclick = () => window.open('/editor.html', '_blank');
+  $('b-editor').onclick = () => window.open(`${import.meta.env.BASE_URL}editor.html`, '_blank');
   $('b-custom').onclick = async () => {
     const chartF = $<HTMLInputElement>('f-chart').files?.[0];
     const audioF = $<HTMLInputElement>('f-audio').files?.[0];
@@ -228,7 +282,7 @@ function results(s: GameSession, failed: boolean) {
   const el = show(`
     <div class="grade">${failed ? 'F' : sc.grade}</div>
     <h2>${failed ? 'SYSTEM FAILURE' : 'TRACK CLEAR'}</h2>
-    <div class="sub">${esc(s.chart.file.meta.title)} · ${esc(s.chart.file.meta.difficulty ?? '')}${autoplay ? ' · AUTOPLAY' : ''}</div>
+    <div class="sub">${esc(s.chart.file.meta.title)} · ${esc(s.chart.file.meta.difficulty ?? '')} · ${esc(musicMappingLabel(settings.musicMapping))}${autoplay ? ' · AUTOPLAY' : ''}</div>
     <div class="stats">
       <div>SCORE</div><div>${sc.score}</div>
       <div>ACCURACY</div><div>${(sc.accuracy * 100).toFixed(2)}%</div>
@@ -247,7 +301,7 @@ function results(s: GameSession, failed: boolean) {
   if (apply)
     apply.onclick = () => {
       settings = { ...settings, audioOffsetMs: suggest };
-      saveSettings(settings);
+      persist();
       apply.textContent = `offset set to ${suggest} ms`;
     };
 }
@@ -297,7 +351,7 @@ function settingsScreen() {
       const k = inp.dataset.k as keyof Settings;
       settings = { ...settings, [k]: Number(inp.value) };
       el.querySelector(`[data-v="${k}"]`)!.textContent = inp.value;
-      saveSettings(settings);
+      persist();
     };
   });
   const bindKeys = () => {
@@ -312,7 +366,7 @@ function settingsScreen() {
           if (clash >= 0 && clash !== lane) keys[clash] = keys[lane]!;
           keys[lane] = e.code;
           settings = { ...settings, keys4: keys };
-          saveSettings(settings);
+          persist();
           window.removeEventListener('keydown', onKey, true);
           el.querySelector('#s-keys')!.innerHTML = keyButtons();
           (el.querySelector('#s-preset') as HTMLSelectElement).value = String(
@@ -325,15 +379,13 @@ function settingsScreen() {
     });
   };
   bindKeys();
-  el.querySelector<HTMLSelectElement>('#s-music')!.onchange = (e) => {
-    settings = { ...settings, musicMapping: (e.target as HTMLSelectElement).value };
-    saveSettings(settings);
-  };
+  el.querySelector<HTMLSelectElement>('#s-music')!.onchange = (e) =>
+    setMapping((e.target as HTMLSelectElement).value);
   el.querySelector<HTMLSelectElement>('#s-preset')!.onchange = (e) => {
     const p = KEY_PRESETS[Number((e.target as HTMLSelectElement).value)];
     if (!p) return;
     settings = { ...settings, keys4: [...p.keys] };
-    saveSettings(settings);
+    persist();
     el.querySelector('#s-keys')!.innerHTML = keyButtons();
     bindKeys();
   };
@@ -388,7 +440,7 @@ async function calibrate() {
   };
   el.querySelector<HTMLButtonElement>('#cal-apply')!.onclick = () => {
     settings = { ...settings, audioOffsetMs: Math.round(median) };
-    saveSettings(settings);
+    persist();
     done();
   };
   el.querySelector<HTMLButtonElement>('#cal-back')!.onclick = done;

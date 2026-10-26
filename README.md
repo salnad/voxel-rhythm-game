@@ -39,7 +39,25 @@ npm run gen:demo     # regenerate the demo charts from the song composition
 
 URL flags (handy for demos and tests): `?map=demo&autostart=1` starts the demo straight away
 (easy chart; `&diff=normal` for normal), and `&autoplay=1` lets a bot play through the real judge.
-`?map=editor` plays the chart handed off from the editor.
+`?map=editor` plays the chart handed off from the editor. `?mapping=<key>` picks an action →
+music mapping from `MUSIC_MAPPINGS` for that page load without changing the saved choice (the
+main menu's ACTIONS → MUSIC selector saves it).
+
+## Playtest hub
+
+Every version is playable in the browser at **https://salnad.github.io/voxel-rhythm-game/**:
+`main/`, one `pr-<n>/` per open pull request (with its number, title and link), and the most
+recently merged PRs. Each entry shows its commit, build time and a link per music mapping.
+
+`.github/workflows/playtest-hub.yml` rebuilds `main` on every push to main and a PR's build on
+every push to its branch, using Vite's `base` so each version lives under its own path. When a PR
+merges, its build moves to "recently merged" (newest 8 kept). When a PR closes without merging,
+its build is deleted. The builds live on the `gh-pages` branch, kept as a single commit;
+`scripts/hub/site.ts` plans the builds and writes the index. Run the workflow by hand
+(Actions → Playtest hub → Run workflow) to rebuild everything.
+
+One-time setup: Settings → Pages → Build and deployment → Source "Deploy from a branch",
+branch `gh-pages`, folder `/ (root)`.
 
 ## Controls
 
