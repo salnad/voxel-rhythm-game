@@ -1,0 +1,37 @@
+{
+  "name": "voxel-rhythm",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Split-screen voxel rhythm game: a lane highway drives a low-poly swordfighter powered by a wavetable synth.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1 --port 5173",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "validate-chart": "tsx scripts/validate-chart.ts",
+    "gen:demo": "tsx scripts/gen-demo-chart.ts"
+  },
+  "dependencies": {
+    "three": "^0.186.1"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^26.6.5",
+    "@types/three": "^0.186.0",
+    "ajv": "^8.20.0",
+    "eslint": "^10.13.0",
+    "eslint-config-prettier": "^10.1.8",
+    "globals": "^17.13.0",
+    "prettier": "^3.9.10",
+    "tsx": "^4.23.15",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.72.1",
+    "vite": "^8.3.5",
+    "vitest": "^5.0.5"
+  }
+}
