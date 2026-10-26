@@ -32,7 +32,10 @@ function noiseBuffer(ctx: BaseAudioContext, seconds: number): AudioBuffer {
  * Render the demo song offline. Returns an AudioBuffer so the demo plays through the
  * exact same path (and clock) as a user's audio file.
  */
-export async function renderDemoSong(sampleRate = 44100): Promise<AudioBuffer> {
+export type DemoBus = 'kick' | 'perc' | 'bass' | 'synth';
+
+/** `solo` renders a single bus (for mixing checks). */
+export async function renderDemoSong(sampleRate = 44100, solo?: DemoBus): Promise<AudioBuffer> {
   const spb = 60 / DEMO_BPM;
   const duration = DEMO_LENGTH_BEATS * spb + 2;
   const ctx = new OfflineAudioContext(2, Math.ceil(duration * sampleRate), sampleRate);
@@ -49,20 +52,25 @@ export async function renderDemoSong(sampleRate = 44100): Promise<AudioBuffer> {
   out.gain.value = 0.8;
   master.connect(clip).connect(out).connect(ctx.destination);
 
-  const kickBus = ctx.createGain();
-  kickBus.gain.value = 0.9;
-  kickBus.connect(makeShaper(ctx, 3)).connect(master);
+  // bus = input gain → saturation → output gain (levels set by solo RMS checks)
+  const makeBus = (inGain: number, drive: number, outGain: number, dest: AudioNode) => {
+    const input = ctx.createGain();
+    input.gain.value = inGain;
+    const output = ctx.createGain();
+    output.gain.value = outGain;
+    input.connect(makeShaper(ctx, drive)).connect(output).connect(dest);
+    return input;
+  };
+  const kickBus = makeBus(0.9, 3, 0.62, master);
   const percBus = ctx.createGain();
-  percBus.gain.value = 0.5;
+  percBus.gain.value = 1.4;
   percBus.connect(master);
-  const bassBus = ctx.createGain();
-  bassBus.gain.value = 0.55;
-  bassBus.connect(makeShaper(ctx, 2.5)).connect(master);
+  const bassBus = makeBus(0.16, 2, 0.75, master);
   // melodic bus gets sidechain ducking on every kick
   const duck = ctx.createGain();
   duck.connect(master);
   const synthBus = ctx.createGain();
-  synthBus.gain.value = 0.32;
+  synthBus.gain.value = 0.55;
   synthBus.connect(makeShaper(ctx, 1.2, 48)).connect(duck);
 
   // simple stereo delay for the synths
@@ -82,7 +90,7 @@ export async function renderDemoSong(sampleRate = 44100): Promise<AudioBuffer> {
   // Each unique voice (instrument + pitch + length) is rendered once in its own small
   // offline context, then summed into per-bus buffers in plain JS. Only the bus effects
   // run in the big context. (One oscillator graph per note took over a minute to render.)
-  type Bus = 'kick' | 'perc' | 'bass' | 'synth';
+  type Bus = DemoBus;
   const busOf: Record<CompEvent['inst'], Bus> = {
     kick: 'kick',
     clap: 'perc',
@@ -124,6 +132,7 @@ export async function renderDemoSong(sampleRate = 44100): Promise<AudioBuffer> {
     }
   }
   for (const b of Object.keys(busNode) as Bus[]) {
+    if (solo && solo !== b) continue;
     const src = ctx.createBufferSource();
     src.buffer = mixes[b];
     src.connect(busNode[b]);

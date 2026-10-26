@@ -60,7 +60,9 @@ export const RAIN = {
 export const TRAIL = {
   lifetime: 0.2,
   maxSamples: 40,
-  opacity: 0.85,
+  opacity: 0.7,
+  /** Echo-slash trails relative to the main trail. */
+  ghostAlpha: 0.22,
 };
 
 export const RENDER = {

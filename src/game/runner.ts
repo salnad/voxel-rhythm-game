@@ -91,6 +91,13 @@ export class PlayRunner {
     this.player.play(-LEAD_IN);
     this.lastPerf = performance.now();
     this.raf = requestAnimationFrame(this.frame);
+    if (import.meta.env.DEV) {
+      // Dev-only hook for automated playtests (scripts/ or CDP).
+      (window as unknown as Record<string, unknown>).__vr = {
+        songTime: () => this.player.songTimeAt(performance.now()),
+        session: this.session,
+      };
+    }
   }
 
   applySettings(s: Settings): void {

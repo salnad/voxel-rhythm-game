@@ -57,6 +57,7 @@ class Trail {
   private readonly geo: THREE.BufferGeometry;
   private readonly color = new THREE.Color();
   stepped = 0;
+  alpha = 1;
   busy = false;
 
   constructor(scene: THREE.Scene) {
@@ -106,7 +107,7 @@ class Trail {
     const s = this.samples;
     for (let i = 0; i < s.length; i++) {
       const { b, t, at } = s[i]!;
-      const k = Math.max(0, 1 - (now - at) / TRAIL.lifetime) * TRAIL.opacity;
+      const k = Math.max(0, 1 - (now - at) / TRAIL.lifetime) * TRAIL.opacity * this.alpha;
       this.pos.set([b.x, b.y, b.z, t.x, t.y, t.z], i * 6);
       const { r, g, b: bl } = this.color;
       this.col.set([r, g, bl, k * 0.15, r, g, bl, k], i * 8);
@@ -215,6 +216,7 @@ export class CombatView {
   private hurtAt = -10;
   private fovPulse = 0;
   private swingDir = 1;
+  private lastCritLabel = -10;
   private readonly tmpB = new THREE.Vector3();
   private readonly tmpT = new THREE.Vector3();
   private readonly laneCount: number;
@@ -431,7 +433,10 @@ export class CombatView {
       });
     }
     if (a.attack === 'slam' || a.attack === 'finisher') this.fovPulse = CAMERA.kickPulseFov;
-    if (a.crit) this.labels.spawn(this.enemyWorldPos(a.noteId), 'CRIT', PALETTE.white);
+    if (a.crit && this.now - this.lastCritLabel > 0.3) {
+      this.lastCritLabel = this.now;
+      this.labels.spawn(this.enemyWorldPos(a.noteId), 'CRIT', PALETTE.white);
+    }
   }
 
   private onCombat(c: CombatEvent): void {
@@ -476,7 +481,8 @@ export class CombatView {
   private startSwing(target: SwingTarget, s: Omit<Swing, 'target' | 'trail' | 'lastSample'>): void {
     const trail = this.trails.find((t) => !t.busy) ?? this.trails[0]!;
     trail.busy = true;
-    trail.setHue(s.mods.trailHue, target.ghost ? 0.5 : 0.62);
+    trail.setHue(s.mods.trailHue, target.ghost ? 0.45 : 0.6);
+    trail.alpha = target.ghost ? TRAIL.ghostAlpha : 1;
     trail.stepped = s.mods.trailStepped;
     target.busy = true;
     this.swings.push({ ...s, target, trail, lastSample: s.start });
