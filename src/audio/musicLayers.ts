@@ -28,6 +28,8 @@ export interface ActionMusicLayer {
 
 export type MusicLayerFactory = (deps: MusicLayerDeps) => ActionMusicLayer;
 
+export { hybridLayer } from './hybrid/hybridLayer';
+
 /** Minimal layer: moves make sword sounds; the song itself plays untouched. */
 export const swordSfxLayer: MusicLayerFactory = ({ session, chart, sfx }) => {
   const off = [

@@ -4,7 +4,7 @@
  * a MusicLayerFactory and registering it here.
  */
 import { instrumentLayer } from '../audio/instrumentLayer';
-import { swordSfxLayer, type MusicLayerFactory } from '../audio/musicLayers';
+import { hybridLayer, swordSfxLayer, type MusicLayerFactory } from '../audio/musicLayers';
 
 export interface MusicMapping {
   label: string;
@@ -23,6 +23,12 @@ export const MUSIC_MAPPINGS: Record<string, MusicMapping> = {
     label: 'SWORD SFX',
     description: 'Moves make sword sounds; the song plays as written.',
     create: swordSfxLayer,
+  },
+  hybrid: {
+    label: 'C · HYBRID',
+    description:
+      'Moves play instruments (808, lead, hats, vocal chops); a clean combo measure fires a production flourish at the bar line.',
+    create: hybridLayer,
   },
 };
 
