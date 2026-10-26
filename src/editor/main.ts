@@ -1,14 +1,16 @@
 import { SongPlayer } from '../audio/songPlayer';
 import { formatChartJson } from '../chart/demoChart';
 import { TempoMap } from '../chart/tempo';
+import { encounterStarts } from '../chart/build';
 import {
+  ACTIONS,
   CHART_FORMAT_ID,
   CHART_FORMAT_VERSION,
   type ChartFile,
   type ChartNote,
 } from '../chart/types';
 import { parseChartText, validateChart } from '../chart/validate';
-import { laneStyle } from '../config/combat';
+import { ACTION_SPECS } from '../config/actions';
 import { proceduralSong, saveHandoff } from '../game/maps';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -41,7 +43,7 @@ function setChart(c: ChartFile, rewriteText = true) {
 function touched() {
   if (!chart) return;
   chart.notes.sort(
-    (a, b) => a.beat - b.beat || chart!.lanes.indexOf(a.lane) - chart!.lanes.indexOf(b.lane),
+    (a, b) => a.beat - b.beat || ACTIONS.indexOf(a.action) - ACTIONS.indexOf(b.action),
   );
   text.value = formatChartJson(chart);
   validate();
@@ -51,7 +53,7 @@ function validate() {
   const r = parseChartText(text.value);
   const w = r.warnings.map((x) => `<div class="warn">⚠ ${esc(x)}</div>`).join('');
   if (r.ok) {
-    statusEl.innerHTML = `<div class="ok">✓ valid · ${r.chart.notes.length} notes · ${r.chart.lanes.length} lanes</div>${w}`;
+    statusEl.innerHTML = `<div class="ok">✓ valid · ${r.chart.notes.length} notes · ${encounterStarts(r.chart).length} enemies</div>${w}`;
   } else {
     statusEl.innerHTML = r.errors.map((x) => `<div class="err">✗ ${esc(x)}</div>`).join('') + w;
   }
@@ -114,10 +116,6 @@ $<HTMLInputElement>('f-audio').onchange = async (e) => {
 };
 
 $('b-new').onclick = () => {
-  const lanes = $<HTMLInputElement>('n-lanes')
-    .value.split(',')
-    .map((s) => s.trim())
-    .filter(Boolean);
   const file = $<HTMLInputElement>('f-audio').files?.[0];
   const c: ChartFile = {
     format: CHART_FORMAT_ID,
@@ -129,7 +127,7 @@ $('b-new').onclick = () => {
       offsetMs: Number($<HTMLInputElement>('n-offset').value),
       beatsPerBar: 4,
     },
-    lanes,
+    encounters: [{ beat: 0, enemy: 'grunt' }],
     notes: [],
   };
   const r = validateChart(c);
@@ -200,7 +198,7 @@ function tick() {
 function layout() {
   const W = canvas.clientWidth;
   const H = canvas.clientHeight;
-  const n = chart?.lanes.length ?? 4;
+  const n = ACTIONS.length;
   const laneW = Math.min(90, (W - 80) / n);
   const x0 = (W - laneW * n) / 2;
   const playY = H * 0.8;
@@ -230,12 +228,12 @@ canvas.addEventListener('pointerdown', (e) => {
   const rect = canvas.getBoundingClientRect();
   const lane = Math.floor((e.clientX - rect.left - x0) / laneW);
   if (lane < 0 || lane >= n) return;
-  const laneName = chart.lanes[lane]!;
+  const action = ACTIONS[lane]!;
   const beat = beatAtY(e.clientY - rect.top);
   const tol = 0.5 / snap();
   const hit = chart.notes.find(
     (nn) =>
-      nn.lane === laneName &&
+      nn.action === action &&
       beat >= nn.beat - tol &&
       beat <= nn.beat + Math.max(tol, nn.length ?? 0),
   );
@@ -245,7 +243,7 @@ canvas.addEventListener('pointerdown', (e) => {
     return;
   }
   const b = Math.max(0, snapBeat(beat));
-  const note: ChartNote = { beat: b, lane: laneName };
+  const note: ChartNote = { beat: b, action };
   chart.notes.push(note);
   drag = { note, startBeat: b };
   canvas.setPointerCapture(e.pointerId);
@@ -322,17 +320,32 @@ function draw() {
     c.fillRect(x0 + i * laneW, 0, 1, H);
   }
   if (chart) {
-    chart.lanes.forEach((l, i) => {
-      c.fillStyle = laneStyle(l, i).color;
+    ACTIONS.forEach((a, i) => {
+      c.fillStyle = ACTION_SPECS[a].color;
       c.font = '11px monospace';
       c.textAlign = 'center';
-      c.fillText(l, x0 + i * laneW + laneW / 2, H - 8);
+      c.fillText(a, x0 + i * laneW + laneW / 2, H - 8);
     });
+    // encounter starts (one enemy each) and prompts
+    c.textAlign = 'left';
+    for (const [k, enc] of encounterStarts(chart).entries()) {
+      const y = playY - (enc.beat - cursorBeat) * pxPerBeat;
+      if (y < -20 || y > H + 20) continue;
+      c.fillStyle = 'rgba(255,59,92,0.8)';
+      c.fillRect(x0 - 70, y, laneW * n + 70, 2);
+      c.fillText(`enemy ${k + 1}${enc.enemy ? ` ${enc.enemy}` : ''}`, x0 - 68, y - 4);
+    }
+    for (const p of chart.prompts ?? []) {
+      const y = playY - (p.beat - cursorBeat) * pxPerBeat;
+      if (y < -20 || y > H + 20) continue;
+      c.fillStyle = p.action ? ACTION_SPECS[p.action].color : '#e6ffe9';
+      c.fillText(`» ${p.text}`, x0 + laneW * n + 40, y + 4);
+    }
     for (const nn of chart.notes) {
-      const i = chart.lanes.indexOf(nn.lane);
+      const i = ACTIONS.indexOf(nn.action);
       if (i < 0) continue;
       const y = playY - (nn.beat - cursorBeat) * pxPerBeat;
-      const color = laneStyle(nn.lane, i).color;
+      const color = ACTION_SPECS[nn.action].color;
       if (nn.length) {
         const y2 = playY - (nn.beat + nn.length - cursorBeat) * pxPerBeat;
         c.fillStyle = color + '66';

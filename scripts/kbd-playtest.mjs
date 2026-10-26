@@ -5,11 +5,15 @@
 // Needs: `npm run dev`, Chrome started with --remote-debugging-port=9222 on DISPLAY (default :1)
 // showing the game, and xdotool. The game must be running in dev mode (exposes window.__vr).
 //
-//   node scripts/kbd-playtest.mjs [--start] [--miss 0.05] [--keys d,f,j,k] [--log timing.json]
+//   node scripts/kbd-playtest.mjs [--start] [--diff easy|normal] [--miss 0.05] [--keys f,g,h,j]
+//                                 [--skip-beats 76,79] [--until 62] [--log timing.json] [--events events.json]
 //
-// --start   navigate to ?map=demo&autostart=1 first
-// --miss    fraction of notes to skip on purpose
-// --log     write (wallclock ms, songTime s) samples, e.g. to line up audio with a screen capture
+// --start       navigate to ?map=demo&autostart=1 first
+// --miss        fraction of notes to skip on purpose
+// --skip-beats  chart beats to skip on purpose (to show miss consequences)
+// --until       stop playing at this song time (s)
+// --log         write (wallclock ms, songTime s) samples, e.g. to line up audio with a screen capture
+// --events      write the sword sound events (song time, kind, action), to render a soundtrack
 
 import { execFile } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
@@ -19,9 +23,12 @@ const opt = (name, def) => {
   const i = args.indexOf(`--${name}`);
   return i >= 0 ? args[i + 1] : def;
 };
-const keys = opt('keys', 'd,f,j,k').split(',');
+const keys = opt('keys', 'f,g,h,j').split(',');
 const missRate = Number(opt('miss', '0.05'));
 const logFile = opt('log', '');
+const eventsFile = opt('events', '');
+const until = Number(opt('until', 'Infinity'));
+const skipBeats = new Set(opt('skip-beats', '').split(',').filter(Boolean).map(Number));
 const display = process.env.DISPLAY ?? ':1';
 
 async function connect(match) {
@@ -60,16 +67,26 @@ async function connect(match) {
 
 let { ws, ev } = await connect('127.0.0.1:5173');
 if (args.includes('--start')) {
-  await ev("location.href='/?map=demo&autostart=1'");
+  await ev(`location.href='/?map=demo&autostart=1&diff=${opt('diff', 'easy')}'`);
   ws.close();
   await new Promise((r) => setTimeout(r, 1000));
   ev = (await connect('autostart=1')).ev;
 }
 while (!(await ev('!!window.__vr'))) await new Promise((r) => setTimeout(r, 100));
 
-const notes = await ev(
-  'window.__vr.session.chart.notes.map(n => ({lane: n.lane, t: n.time, end: n.endTime}))',
-);
+await ev(`(() => {
+  const s = window.__vr.session;
+  const log = (window.__vrlog = []);
+  s.bus.on('input', (i) => i.down && log.push({ t: i.time, kind: 'swing', lane: i.lane }));
+  s.bus.on('action', (a) => a.hit && a.kind !== 'holdEnd' && log.push({ t: a.time, kind: 'hit', lane: a.lane, perfect: a.judgement === 'perfect' }));
+  s.bus.on('duel', (d) => ['playerHit', 'recovered', 'defeated'].includes(d.type) && log.push({ t: d.time, kind: d.type }));
+  return true;
+})()`);
+const notes = (
+  await ev(
+    'window.__vr.session.chart.notes.map(n => ({lane: n.lane, beat: n.beat, t: n.time, end: n.endTime}))',
+  )
+).filter((n) => !skipBeats.has(n.beat) && n.t < until);
 let seed = 7;
 const rand = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
 const events = [];
@@ -97,9 +114,10 @@ while (i < events.length) {
   const next = events[i]?.t ?? now;
   if (next - now > 0.12) await new Promise((r) => setTimeout(r, 40));
 }
-await new Promise((r) => setTimeout(r, 3000));
+await new Promise((r) => setTimeout(r, 1500));
+if (eventsFile) writeFileSync(eventsFile, JSON.stringify(await ev('window.__vrlog')));
 const result = await ev(
-  '({counts: window.__vr.session.score.counts, accuracy: window.__vr.session.score.accuracy, meanOffsetMs: window.__vr.session.score.meanOffsetMs})',
+  '({counts: window.__vr.session.score.counts, accuracy: window.__vr.session.score.accuracy, meanOffsetMs: window.__vr.session.score.meanOffsetMs, defeated: window.__vr.session.duel.defeated, hitsTaken: window.__vr.session.duel.hitsTaken})',
 );
 console.log(JSON.stringify(result));
 if (logFile) writeFileSync(logFile, JSON.stringify(samples));

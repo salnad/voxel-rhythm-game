@@ -10,27 +10,23 @@
     <div id="app">
       <canvas id="rain"></canvas>
       <div id="stage">
-        <div id="left">
-          <canvas id="combat"></canvas>
-          <div id="labels"></div>
-          <div id="hud-left" class="hud">
-            <div class="hp">
-              <span>HP</span>
-              <div class="bar"><div id="hp-fill"></div></div>
-            </div>
-            <div class="row"><span>ECHO PARRY</span><span id="parry"></span></div>
-            <div class="row"><span>KILLS</span><span id="kills">0</span></div>
+        <canvas id="arena"></canvas>
+        <div id="labels"></div>
+        <canvas id="hud"></canvas>
+        <div id="hud-left" class="hud">
+          <div class="hp">
+            <span>HP</span>
+            <div class="bar"><div id="hp-fill"></div></div>
           </div>
-          <div id="synth-mount"></div>
+          <div class="row"><span>ECHO PARRY</span><span id="parry"></span></div>
+          <div class="row"><span>ENEMIES</span><span id="kills">0</span></div>
         </div>
-        <div id="right">
-          <canvas id="highway"></canvas>
-          <div id="hud-right" class="hud">
-            <div id="score">0000000</div>
-            <div class="row"><span>ACC</span><span id="acc">100.00%</span></div>
-            <div class="row"><span>MULT</span><span id="mult">x1</span></div>
-          </div>
+        <div id="hud-right" class="hud">
+          <div id="score">0000000</div>
+          <div class="row"><span>ACC</span><span id="acc">100.00%</span></div>
+          <div class="row"><span>MULT</span><span id="mult">x1</span></div>
         </div>
+        <div id="synth-mount"></div>
       </div>
       <div id="overlay"></div>
       <div class="scanlines"></div>

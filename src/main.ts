@@ -1,7 +1,9 @@
 import { renderMetronome, Sfx } from './audio/sfx';
 import { SongPlayer } from './audio/songPlayer';
 import { PLAYER } from './config/gameplay';
-import { loadSettings, saveSettings, type Settings } from './core/settings';
+import { ACTIONS } from './chart/types';
+import { ACTION_SPECS } from './config/actions';
+import { KEY_PRESETS, keyLabel, loadSettings, saveSettings, type Settings } from './core/settings';
 import {
   fetchMapIndex,
   loadBuiltinMap,
@@ -42,6 +44,13 @@ function idle(now: number) {
 idleRaf = requestAnimationFrame(idle);
 window.addEventListener('resize', () => rain.resize());
 
+function lanesHelp(): string {
+  return `<div class="lanes-help">${ACTIONS.map((a, i) => {
+    const spec = ACTION_SPECS[a];
+    return `<div class="lane" style="color:${spec.color}"><b>[${esc(keyLabel(settings.keys4[i] ?? ''))}] ${spec.label}</b>when the enemy ${spec.telegraph}</div>`;
+  }).join('')}</div>`;
+}
+
 function show(html: string): HTMLElement {
   overlay.innerHTML = `<div class="screen">${html}</div>`;
   return overlay.firstElementChild as HTMLElement;
@@ -63,7 +72,7 @@ async function menu(): Promise<void> {
   }
   const el = show(`
     <h1>VOXEL//RHYTHM</h1>
-    <div class="sub">hit the lanes. swing the sword. hold the line.</div>
+    <div class="sub">one enemy at a time. four keys. every key is a sword move.</div>
     <div class="maps">
       ${maps
         .map(
@@ -85,12 +94,13 @@ async function menu(): Promise<void> {
       <button class="big" id="b-cal">CALIBRATE OFFSET</button>
       <button class="big" id="b-editor">MAP EDITOR</button>
     </div>
+    ${lanesHelp()}
     <div class="help">
-      <kbd>D</kbd> <kbd>F</kbd> <kbd>J</kbd> <kbd>K</kbd> hit lanes (kick / perc / bass / synth) &nbsp; hold long notes<br>
+      ${settings.keys4.map((k) => `<kbd>${esc(keyLabel(k))}</kbd>`).join(' ')} block / slash / stab / flourish (change keys in SETTINGS) &nbsp; hold long cues<br>
       <kbd>Esc</kbd> pause &nbsp; <kbd>Tab</kbd> show/hide the sword synth &nbsp; <kbd>R</kbd> retry on results<br>
-      Each note is an enemy. Hit it on time and the sword cuts it down; miss and it gets through.<br>
-      Tweak the WAVETABLE synth (bottom left) to change your sword: WT POS reshapes the swing arc,
-      UNISON/DETUNE add echo slashes that build ECHO PARRY charges.
+      One enemy at a time. Read its telegraph, hit the matching action as its cue reaches the line.
+      Start with EASY. Tweak the WAVETABLE synth to change your sword: WT POS reshapes slashes,
+      UNISON adds echo blades that build ECHO PARRY (it saves you from a missed block).
     </div>`);
   el.querySelectorAll<HTMLButtonElement>('button[data-map]').forEach((b) => {
     b.onclick = () => playBuiltin(b.dataset.map!, b.dataset.file!);
@@ -146,7 +156,7 @@ function startPlay(map: LoadedMap) {
   cancelAnimationFrame(idleRaf);
   screen = 'play';
   runner = new PlayRunner(
-    { combatCanvas: $('combat'), highwayCanvas: $('highway'), labelLayer: $('labels') },
+    { arenaCanvas: $('arena'), hudCanvas: $('hud'), labelLayer: $('labels') },
     map,
     player,
     sfx,
@@ -160,16 +170,16 @@ function startPlay(map: LoadedMap) {
 }
 
 function hud(s: GameSession) {
-  const hp = s.sim.hp / PLAYER.maxHp;
+  const hp = s.duel.hp / PLAYER.maxHp;
   const fill = $('hp-fill');
   fill.style.width = `${hp * 100}%`;
   fill.classList.toggle('low', hp < 0.3);
-  const charges = Math.floor(s.sim.parryCharge);
-  const partial = s.sim.parryCharge - charges;
+  const charges = Math.floor(s.duel.parryCharge);
+  const partial = s.duel.parryCharge - charges;
   $('parry').textContent =
     '◆'.repeat(charges) +
     (s.mods.echoCount > 0 ? `◇${Math.round(partial * 100)}%` : ' (needs UNISON > 1)');
-  $('kills').textContent = String(s.sim.kills);
+  $('kills').textContent = `${s.duel.defeated} / ${s.chart.encounters.length}`;
   $('score').textContent = String(s.score.score).padStart(7, '0');
   $('acc').textContent = `${(s.score.accuracy * 100).toFixed(2)}%`;
   $('mult').textContent = `x${s.score.multiplier}`;
@@ -220,7 +230,8 @@ function results(s: GameSession, failed: boolean) {
       <div>ACCURACY</div><div>${(sc.accuracy * 100).toFixed(2)}%</div>
       <div>MAX COMBO</div><div>${sc.maxCombo}</div>
       <div>PERFECT / GREAT / GOOD / MISS</div><div>${sc.counts.perfect} / ${sc.counts.great} / ${sc.counts.good} / ${sc.counts.miss}</div>
-      <div>ENEMIES CUT</div><div>${s.sim.kills} / ${s.chart.notes.length}</div>
+      <div>ENEMIES DEFEATED</div><div>${s.duel.defeated} / ${s.chart.encounters.length}${s.duel.escaped ? ` (${s.duel.escaped} escaped)` : ''}</div>
+      <div>HITS TAKEN</div><div>${s.duel.hitsTaken}</div>
       <div>MEAN HIT OFFSET</div><div>${mean >= 0 ? '+' : ''}${mean.toFixed(1)} ms (${mean >= 0 ? 'late' : 'early'})</div>
     </div>
     ${!autoplay && Math.abs(mean) > 8 ? `<div class="help">Your hits average ${mean.toFixed(0)} ms ${mean > 0 ? 'late' : 'early'}. <button class="btn" id="r-apply">set audio offset to ${suggest} ms</button></div>` : ''}
@@ -238,12 +249,19 @@ function results(s: GameSession, failed: boolean) {
 
 // ------------------------------------------------------------------ settings
 
+function keyButtons(): string {
+  return ACTIONS.map(
+    (a, i) =>
+      `<button class="btn" data-lane="${i}" style="color:${ACTION_SPECS[a].color};border-color:${ACTION_SPECS[a].color}">${ACTION_SPECS[a].label} ${esc(keyLabel(settings.keys4[i] ?? ''))}</button>`,
+  ).join(' ');
+}
+
 function settingsScreen() {
   screen = 'other';
   const rows: Array<[keyof Settings, string, number, number, number]> = [
     ['audioOffsetMs', 'audio offset (ms)', -250, 250, 1],
     ['visualOffsetMs', 'visual offset (ms)', -150, 150, 1],
-    ['scrollSpeed', 'scroll speed', 0.5, 2.5, 0.05],
+    ['scrollSpeed', 'cue speed', 0.5, 2.5, 0.05],
     ['musicVolume', 'music volume', 0, 1, 0.01],
     ['hitsoundVolume', 'hitsound volume', 0, 1, 0.01],
   ];
@@ -255,10 +273,12 @@ function settingsScreen() {
             `<span>${label}</span><input type="range" data-k="${k}" min="${min}" max="${max}" step="${step}" value="${settings[k] as number}"><span data-v="${k}">${settings[k] as number}</span>`,
         )
         .join('')}
-      <span>lane keys</span><span>${settings.keys4.map((k, i) => `<button class="btn" data-lane="${i}">${k.replace('Key', '')}</button>`).join(' ')}</span><span></span>
+      <span>key preset</span><span><select id="s-preset">${KEY_PRESETS.map((p, i) => `<option value="${i}" ${p.keys.join() === settings.keys4.join() ? 'selected' : ''}>${p.name}</option>`).join('')}<option value="-1" ${KEY_PRESETS.some((p) => p.keys.join() === settings.keys4.join()) ? '' : 'selected'}>custom</option></select></span><span></span>
+      <span>action keys</span><span id="s-keys">${keyButtons()}</span><span></span>
     </div>
     <div class="help">Audio offset: positive if you tend to hit late (or your audio output is delayed). Use CALIBRATE to measure it.<br>
-    Visual offset only moves the highway drawing. Click a lane key, then press the new key.</div>
+    Visual offset only moves the cue drawing. Cue speed: higher = cues arrive faster and sit further apart.<br>
+    Pick a preset, or click an action's key and press the new key.</div>
     <button class="big" id="s-back">BACK</button>`);
   el.querySelectorAll<HTMLInputElement>('input[data-k]').forEach((inp) => {
     inp.oninput = () => {
@@ -268,21 +288,39 @@ function settingsScreen() {
       saveSettings(settings);
     };
   });
-  el.querySelectorAll<HTMLButtonElement>('button[data-lane]').forEach((b) => {
-    b.onclick = () => {
-      b.textContent = '…';
-      const onKey = (e: KeyboardEvent) => {
-        e.preventDefault();
-        const keys = [...settings.keys4];
-        keys[Number(b.dataset.lane)] = e.code;
-        settings = { ...settings, keys4: keys };
-        saveSettings(settings);
-        b.textContent = e.code.replace('Key', '');
-        window.removeEventListener('keydown', onKey, true);
+  const bindKeys = () => {
+    el.querySelectorAll<HTMLButtonElement>('button[data-lane]').forEach((b) => {
+      b.onclick = () => {
+        b.textContent = '…';
+        const onKey = (e: KeyboardEvent) => {
+          e.preventDefault();
+          const keys = [...settings.keys4];
+          const lane = Number(b.dataset.lane);
+          const clash = keys.indexOf(e.code);
+          if (clash >= 0 && clash !== lane) keys[clash] = keys[lane]!;
+          keys[lane] = e.code;
+          settings = { ...settings, keys4: keys };
+          saveSettings(settings);
+          window.removeEventListener('keydown', onKey, true);
+          el.querySelector('#s-keys')!.innerHTML = keyButtons();
+          (el.querySelector('#s-preset') as HTMLSelectElement).value = String(
+            KEY_PRESETS.findIndex((p) => p.keys.join() === keys.join()),
+          );
+          bindKeys();
+        };
+        window.addEventListener('keydown', onKey, true);
       };
-      window.addEventListener('keydown', onKey, true);
-    };
-  });
+    });
+  };
+  bindKeys();
+  el.querySelector<HTMLSelectElement>('#s-preset')!.onchange = (e) => {
+    const p = KEY_PRESETS[Number((e.target as HTMLSelectElement).value)];
+    if (!p) return;
+    settings = { ...settings, keys4: [...p.keys] };
+    saveSettings(settings);
+    el.querySelector('#s-keys')!.innerHTML = keyButtons();
+    bindKeys();
+  };
   $('s-back').onclick = () => void menu();
 }
 
@@ -380,7 +418,7 @@ async function boot() {
     return;
   }
   if (map && params.get('autostart') === '1') {
-    const diff = params.get('diff') ?? 'normal';
+    const diff = params.get('diff') ?? 'easy';
     await playBuiltin(map, diff === 'normal' ? 'chart.json' : `chart-${diff}.json`);
     return;
   }

@@ -1,9 +1,11 @@
 import type { SongPlayer } from '../audio/songPlayer';
 import type { Sfx } from '../audio/sfx';
-import { AUTOPLAY } from '../config/gameplay';
-import { keysForLaneCount, type Settings } from '../core/settings';
-import { CombatView } from '../render/combatView';
-import { HighwayView } from '../render/highway';
+import type { Action } from '../chart/types';
+import { APPROACH_SECONDS, AUTOPLAY } from '../config/gameplay';
+import { CAMERA } from '../config/visuals';
+import type { Settings } from '../core/settings';
+import { ArenaView } from '../render/arenaView';
+import { HudOverlay } from '../render/hudOverlay';
 import type { DigitalRain } from '../render/rain';
 import { autoplayInputs, KeyboardLanes, type LaneInput } from '../rhythm/input';
 import type { SynthPatch } from '../synth/patch';
@@ -16,8 +18,8 @@ const LEAD_IN = 2.5;
 const OUTRO = 2;
 
 export interface RunnerElements {
-  combatCanvas: HTMLCanvasElement;
-  highwayCanvas: HTMLCanvasElement;
+  arenaCanvas: HTMLCanvasElement;
+  hudCanvas: HTMLCanvasElement;
   labelLayer: HTMLElement;
 }
 
@@ -29,8 +31,8 @@ export interface RunnerHooks {
 /** Drives one play: clock → inputs → session → views, once per animation frame. */
 export class PlayRunner {
   readonly session: GameSession;
-  private readonly highway: HighwayView;
-  private readonly combat: CombatView;
+  private readonly arena: ArenaView;
+  private readonly hud: HudOverlay;
   private readonly keyboard: KeyboardLanes;
   private autoQueue: LaneInput[] = [];
   private raf = 0;
@@ -38,8 +40,8 @@ export class PlayRunner {
   private ended = false;
   private downAt: number | null = null;
   private readonly onResize = () => {
-    this.highway.resize();
-    this.combat.resize();
+    this.arena.resize();
+    this.hud.resize();
   };
   private readonly onPointer = (e: PointerEvent) => this.pointerLane(e);
 
@@ -56,11 +58,11 @@ export class PlayRunner {
   ) {
     const chart = map.chart;
     this.session = new GameSession(chart, { noFail: settings.noFail, patch });
-    const keys = keysForLaneCount(settings, chart.lanes.length);
+    const keys = settings.keys4;
     this.keyboard = new KeyboardLanes((perf) => this.player.songTimeAt(perf));
     this.keyboard.setKeys(autoplay ? [] : keys);
-    this.highway = new HighwayView(els.highwayCanvas, chart, this.session, keys);
-    this.combat = new CombatView(els.combatCanvas, els.labelLayer, chart, this.session);
+    this.arena = new ArenaView(els.arenaCanvas, els.labelLayer, chart, this.session);
+    this.hud = new HudOverlay(els.hudCanvas, chart, this.session, this.arena, keys);
     if (autoplay)
       this.autoQueue = autoplayInputs(
         chart.notes,
@@ -69,20 +71,27 @@ export class PlayRunner {
         AUTOPLAY.seed,
       );
 
-    this.session.bus.on('judgement', (j) => {
-      if (j.judgement !== 'miss' && j.kind !== 'holdEnd')
-        this.sfx.hit(j.lane, j.judgement === 'perfect');
-      if (j.judgement !== 'miss' && chart.lanes[j.lane] === 'kick') this.rain.pulse(0.6);
+    this.session.bus.on('input', (i) => {
+      if (i.down) this.sfx.swing(chart.lanes[i.lane] as Action);
     });
-    this.session.bus.on('combat', (c) => {
-      if (c.type === 'playerHit') {
+    this.session.bus.on('action', (a) => {
+      if (a.hit && a.kind !== 'holdEnd') this.sfx.hit(a.action, a.judgement === 'perfect');
+      if (a.hit && a.action === 'block') this.rain.pulse(0.6);
+      if (a.hit && a.action === 'flourish') this.rain.pulse(1);
+    });
+    this.session.bus.on('duel', (d) => {
+      if (d.type === 'playerHit') {
         this.sfx.hurt();
         glitch();
+      } else if (d.type === 'recovered') {
+        this.sfx.clank();
+      } else if (d.type === 'defeated') {
+        this.sfx.shatter();
       }
     });
     window.addEventListener('resize', this.onResize);
-    els.highwayCanvas.addEventListener('pointerdown', this.onPointer);
-    els.highwayCanvas.addEventListener('pointerup', this.onPointer);
+    els.hudCanvas.addEventListener('pointerdown', this.onPointer);
+    els.hudCanvas.addEventListener('pointerup', this.onPointer);
   }
 
   start(): void {
@@ -96,6 +105,7 @@ export class PlayRunner {
       (window as unknown as Record<string, unknown>).__vr = {
         songTime: () => this.player.songTimeAt(performance.now()),
         session: this.session,
+        camera: CAMERA,
       };
     }
   }
@@ -128,11 +138,13 @@ export class PlayRunner {
     cancelAnimationFrame(this.raf);
     this.player.stop();
     this.keyboard.dispose();
-    this.combat.dispose();
+    this.arena.dispose();
     window.removeEventListener('resize', this.onResize);
-    this.els.highwayCanvas.removeEventListener('pointerdown', this.onPointer);
-    this.els.highwayCanvas.removeEventListener('pointerup', this.onPointer);
+    this.els.hudCanvas.removeEventListener('pointerdown', this.onPointer);
+    this.els.hudCanvas.removeEventListener('pointerup', this.onPointer);
     this.session.bus.clear();
+    const ctx = this.els.hudCanvas.getContext('2d');
+    ctx?.clearRect(0, 0, this.els.hudCanvas.width, this.els.hudCanvas.height);
   }
 
   private readonly frame = (now: number): void => {
@@ -150,13 +162,14 @@ export class PlayRunner {
       this.session.step(inputs, t);
     }
     const drawT = t + this.settings.visualOffsetMs / 1000;
-    this.highway.draw(drawT, this.settings.scrollSpeed);
-    this.combat.update(drawT, this.player.playing ? dt : 0, realDt);
+    const approach = APPROACH_SECONDS / Math.max(0.25, this.settings.scrollSpeed);
+    this.arena.update(drawT, this.player.playing ? dt : 0, realDt, approach);
+    this.hud.draw(drawT);
     this.rain.update(dt);
     this.hooks.onFrame(this.session, t);
 
     if (this.ended) return;
-    if (this.session.sim.down) {
+    if (this.session.duel.down) {
       this.downAt ??= now;
       this.player.output.gain.value *= 0.95;
       if (now - this.downAt > 1500) this.finish(true);
@@ -172,15 +185,23 @@ export class PlayRunner {
     this.hooks.onEnd(this.session, failed);
   }
 
+  /** Touch/click: the nearest lane label or lane at the pointer's x. */
   private pointerLane(e: PointerEvent): void {
     if (this.autoplay) return;
-    const rect = this.els.highwayCanvas.getBoundingClientRect();
-    const n = this.map.chart.lanes.length;
-    const laneW = Math.min(104, (rect.width * 0.86) / n);
-    const x0 = rect.left + (rect.width - laneW * n) / 2;
-    const lane = Math.floor((e.clientX - x0) / laneW);
-    if (lane < 0 || lane >= n) return;
-    this.keyboard.push(lane, e.type === 'pointerdown', e.timeStamp);
+    const rect = this.els.hudCanvas.getBoundingClientRect();
+    const { xs, width } = this.arena.laneScreen();
+    const x = e.clientX - rect.left;
+    let best = -1;
+    let bestD = Infinity;
+    xs.forEach((lx, i) => {
+      const d = Math.abs(lx - x);
+      if (d < bestD) {
+        bestD = d;
+        best = i;
+      }
+    });
+    if (best < 0 || bestD > width * 2) return;
+    this.keyboard.push(best, e.type === 'pointerdown', e.timeStamp);
   }
 }
 

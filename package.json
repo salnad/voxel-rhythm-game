@@ -2,7 +2,7 @@
   "name": "voxel-rhythm",
   "version": "0.1.0",
   "private": true,
-  "description": "Split-screen voxel rhythm game: a lane highway drives a low-poly swordfighter powered by a wavetable synth.",
+  "description": "Voxel rhythm duel: four action lanes (block, slash, stab, flourish) drive a low-poly swordfighter powered by a wavetable synth.",
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1 --port 5173",
