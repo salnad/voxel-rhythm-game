@@ -155,6 +155,9 @@ export function reconcile(
 
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 
+/** Merge commits here carry a Co-authored-by trailer on the subject line itself. */
+const headline = (subject: string) => subject.replace(/\s*Co-authored-by:.*$/is, '');
+
 function card(v: VersionInfo): string {
   const commit = `https://github.com/${v.repo}/commit/${v.sha}`;
   const heading =
@@ -178,7 +181,7 @@ function card(v: VersionInfo): string {
   <div class="meta">
     <span class="branch">${esc(v.branch)}</span> ·
     <a href="${commit}" target="_blank" rel="noopener"><code>${esc(v.sha.slice(0, 7))}</code></a>
-    ${v.kind === 'main' ? `<span class="subject">${esc(v.subject)}</span>` : ''}
+    ${v.kind === 'main' ? `<span class="subject">${esc(headline(v.subject))}</span>` : ''}
   </div>
   <div class="meta">built <time data-t="${esc(v.builtAt)}">${esc(v.builtAt)}</time>${closed} · <a href="${play}editor.html" target="_blank">map editor</a> · <code class="path">/${esc(v.slot)}/</code></div>
   ${mappings}

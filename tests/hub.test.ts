@@ -124,7 +124,7 @@ describe('renderIndex', () => {
   it('lists each section, links mappings, and escapes text', () => {
     const html = renderIndex(
       [
-        version('main', { subject: 'Merge #2: <b>' }),
+        version('main', { subject: 'Merge #2: <b> Co-authored-by: Someone <a@b.c>' }),
         version('pr-3', { title: 'Effects & "hybrid"', url: 'https://x/pull/3' }),
         version('pr-1', { status: 'archived', closedAt: '2026-10-26T00:00:00Z' }),
       ],
@@ -133,7 +133,7 @@ describe('renderIndex', () => {
     );
     expect(html).toContain('href="pr-3/?mapping=sword"');
     expect(html).toContain('Effects &#38; &#34;hybrid&#34;');
-    expect(html).toContain('Merge #2: &#60;b&#62;');
+    expect(html).toContain('Merge #2: &#60;b&#62;</span>');
     expect(html).toContain('title="Sword &#60;sounds&#62;"');
     expect(html.indexOf('pr-3/')).toBeLessThan(html.indexOf('RECENTLY MERGED'));
     expect(html.indexOf('href="pr-1/"')).toBeGreaterThan(html.indexOf('RECENTLY MERGED'));
