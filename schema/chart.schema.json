@@ -24,8 +24,16 @@
       "type": "object",
       "description": "Exactly one of file or procedural.",
       "properties": {
-        "file": { "type": "string", "minLength": 1, "description": "Audio path relative to the chart file." },
-        "procedural": { "type": "string", "minLength": 1, "description": "Built-in procedural song, e.g. hyperpop-demo." },
+        "file": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Audio path relative to the chart file."
+        },
+        "procedural": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Built-in procedural song, e.g. hyperpop-demo."
+        },
         "lengthBeats": { "type": "number", "exclusiveMinimum": 0 }
       },
       "oneOf": [{ "required": ["file"] }, { "required": ["procedural"] }]
@@ -35,7 +43,10 @@
       "required": ["bpm", "offsetMs"],
       "properties": {
         "bpm": { "type": "number", "minimum": 20, "maximum": 400 },
-        "offsetMs": { "type": "number", "description": "Milliseconds into the audio where beat 0 lands." },
+        "offsetMs": {
+          "type": "number",
+          "description": "Milliseconds into the audio where beat 0 lands."
+        },
         "beatsPerBar": { "type": "integer", "minimum": 1, "maximum": 16 },
         "bpmChanges": {
           "type": "array",
@@ -64,9 +75,17 @@
         "type": "object",
         "required": ["beat", "lane"],
         "properties": {
-          "beat": { "type": "number", "minimum": 0, "description": "Beat position from beat 0 (0.5 = eighth note, 0.25 = sixteenth)." },
+          "beat": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Beat position from beat 0 (0.5 = eighth note, 0.25 = sixteenth)."
+          },
           "lane": { "type": "string", "description": "Must be one of lanes." },
-          "length": { "type": "number", "minimum": 0, "description": "Hold length in beats; omit for a tap." }
+          "length": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Hold length in beats; omit for a tap."
+          }
         }
       }
     }

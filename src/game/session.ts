@@ -51,7 +51,9 @@ export class GameSession {
     for (const inp of inputs) {
       this.advance(inp.time);
       this.bus.emit('input', inp);
-      const j = inp.down ? this.judge.press(inp.lane, inp.time) : this.judge.release(inp.lane, inp.time);
+      const j = inp.down
+        ? this.judge.press(inp.lane, inp.time)
+        : this.judge.release(inp.lane, inp.time);
       if (j) this.handleJudgement(j);
     }
     this.advance(t);

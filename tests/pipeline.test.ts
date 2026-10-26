@@ -59,12 +59,24 @@ describe('synth modifiers', () => {
 
 describe('GameSession pipeline', () => {
   it('hit → attack action → kill; miss → player hit', () => {
-    const s = new GameSession(chartFrom([{ beat: 1, lane: 'kick' }, { beat: 2, lane: 'perc' }]), { noFail: false });
+    const s = new GameSession(
+      chartFrom([
+        { beat: 1, lane: 'kick' },
+        { beat: 2, lane: 'perc' },
+      ]),
+      { noFail: false },
+    );
     const log: string[] = [];
     s.bus.on('judgement', (j) => log.push(`j:${j.judgement}`));
     s.bus.on('action', (a) => log.push(`a:${a.attack}`));
     s.bus.on('combat', (c) => log.push(`c:${c.type}`));
-    s.step([{ lane: 0, down: true, time: 1.01 }, { lane: 0, down: false, time: 1.05 }], 1.1);
+    s.step(
+      [
+        { lane: 0, down: true, time: 1.01 },
+        { lane: 0, down: false, time: 1.05 },
+      ],
+      1.1,
+    );
     s.step([], 3);
     expect(log).toEqual(['j:perfect', 'a:slam', 'c:kill', 'j:miss', 'c:playerHit']);
     expect(s.sim.hp).toBeLessThan(PLAYER.maxHp);
@@ -83,7 +95,13 @@ describe('GameSession pipeline', () => {
   });
 
   it('echo parry absorbs a miss once charged', () => {
-    const s = new GameSession(chartFrom([{ beat: 1, lane: 'kick' }, { beat: 3, lane: 'kick' }]), { noFail: true });
+    const s = new GameSession(
+      chartFrom([
+        { beat: 1, lane: 'kick' },
+        { beat: 3, lane: 'kick' },
+      ]),
+      { noFail: true },
+    );
     s.sim.parryCharge = 1;
     const events: string[] = [];
     s.bus.on('combat', (c) => events.push(c.type));

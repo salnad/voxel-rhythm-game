@@ -75,7 +75,12 @@ export function rng(seed: number): () => number {
  * Scripted "bot" input for demos and soak tests. It goes through the real judge,
  * with gaussian timing jitter and a deliberate miss rate.
  */
-export function autoplayInputs(notes: readonly Note[], jitter: number, missRate: number, seed: number): LaneInput[] {
+export function autoplayInputs(
+  notes: readonly Note[],
+  jitter: number,
+  missRate: number,
+  seed: number,
+): LaneInput[] {
   const r = rng(seed);
   const gauss = () => {
     const u = Math.max(1e-9, r());

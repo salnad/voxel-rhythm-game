@@ -40,8 +40,14 @@ describe('validateChart', () => {
     const r = validateChart(c);
     expect(r.ok).toBe(false);
     if (r.ok) return;
-    expect(r.errors).toContain('notes[3].beat: must be a number >= 0 (beats from beat 0; 0.5 = an eighth note later), got -1 (number)');
-    expect(r.errors.some((e) => e.startsWith('notes[3].lane: "kik"') && e.includes('[kick, perc, bass, synth]'))).toBe(true);
+    expect(r.errors).toContain(
+      'notes[3].beat: must be a number >= 0 (beats from beat 0; 0.5 = an eighth note later), got -1 (number)',
+    );
+    expect(
+      r.errors.some(
+        (e) => e.startsWith('notes[3].lane: "kik"') && e.includes('[kick, perc, bass, synth]'),
+      ),
+    ).toBe(true);
     expect(r.errors.some((e) => e.startsWith('notes[4].length'))).toBe(true);
   });
 
@@ -97,7 +103,9 @@ describe('demo map', () => {
   ] as const) {
     it(`committed ${file} matches the composition (run npm run gen:demo if this fails)`, () => {
       const text = readFileSync(resolve(root, 'public/maps/demo', file), 'utf8');
-      expect(text).toBe(formatChartJson(buildDemoChart(difficulty), '../../../schema/chart.schema.json'));
+      expect(text).toBe(
+        formatChartJson(buildDemoChart(difficulty), '../../../schema/chart.schema.json'),
+      );
       const r = parseChartText(text);
       expect(r.ok).toBe(true);
       expect(schemaValidate(JSON.parse(text))).toBe(true);

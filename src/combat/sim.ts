@@ -18,7 +18,14 @@ export interface Enemy {
 }
 
 export type CombatEvent =
-  | { type: 'kill'; enemyId: number; lane: number; judgement: Judgement; crit: boolean; time: number }
+  | {
+      type: 'kill';
+      enemyId: number;
+      lane: number;
+      judgement: Judgement;
+      crit: boolean;
+      time: number;
+    }
   | { type: 'grindStart'; enemyId: number; lane: number; time: number }
   | { type: 'playerHit'; enemyId: number; lane: number; damage: number; time: number }
   | { type: 'parry'; enemyId: number; lane: number; time: number }
@@ -75,7 +82,14 @@ export class CombatSim {
     } else {
       this.setState(e, 'dying', a.time);
       this.kills++;
-      this.pending.push({ type: 'kill', enemyId: e.id, lane: e.lane, judgement: a.judgement, crit: a.crit, time: a.time });
+      this.pending.push({
+        type: 'kill',
+        enemyId: e.id,
+        lane: e.lane,
+        judgement: a.judgement,
+        crit: a.crit,
+        time: a.time,
+      });
     }
     this.parryCharge = Math.min(3, this.parryCharge + a.mods.parryChargePerHit);
     this.heal(PLAYER.heal[a.judgement]);
@@ -83,7 +97,14 @@ export class CombatSim {
 
   letThrough(noteId: number, time: number): void {
     const e = this.enemies[noteId];
-    if (!e || e.state === 'gone' || e.state === 'dying' || e.state === 'striking' || e.state === 'parried') return;
+    if (
+      !e ||
+      e.state === 'gone' ||
+      e.state === 'dying' ||
+      e.state === 'striking' ||
+      e.state === 'parried'
+    )
+      return;
     if (this.parryCharge >= 1) {
       this.parryCharge -= 1;
       this.setState(e, 'parried', time);

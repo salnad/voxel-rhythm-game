@@ -1,9 +1,4 @@
-import {
-  composeDemo,
-  DEMO_BPM,
-  DEMO_LANES,
-  DEMO_LENGTH_BEATS,
-} from '../audio/demo/composition';
+import { composeDemo, DEMO_BPM, DEMO_LANES, DEMO_LENGTH_BEATS } from '../audio/demo/composition';
 import { CHART_FORMAT_ID, CHART_FORMAT_VERSION, type ChartFile, type ChartNote } from './types';
 
 export type DemoDifficulty = 'normal' | 'easy';
@@ -31,7 +26,10 @@ export function buildDemoChart(difficulty: DemoDifficulty = 'normal'): ChartFile
     seen.add(k);
     return true;
   });
-  unique.sort((a, b) => a.beat - b.beat || DEMO_LANES.indexOf(a.lane as never) - DEMO_LANES.indexOf(b.lane as never));
+  unique.sort(
+    (a, b) =>
+      a.beat - b.beat || DEMO_LANES.indexOf(a.lane as never) - DEMO_LANES.indexOf(b.lane as never),
+  );
   return {
     format: CHART_FORMAT_ID,
     version: CHART_FORMAT_VERSION,
@@ -53,6 +51,8 @@ export function buildDemoChart(difficulty: DemoDifficulty = 'normal'): ChartFile
 export function formatChartJson(chart: ChartFile, schemaRef?: string): string {
   const { notes, ...rest } = chart;
   const head = JSON.stringify(schemaRef ? { $schema: schemaRef, ...rest } : rest, null, 2);
-  const noteLines = notes.map((n) => '    ' + JSON.stringify(n).replace(/,"/g, ', "').replace(/":/g, '": '));
+  const noteLines = notes.map(
+    (n) => '    ' + JSON.stringify(n).replace(/,"/g, ', "').replace(/":/g, '": '),
+  );
   return `${head.slice(0, -2)},\n  "notes": [\n${noteLines.join(',\n')}\n  ]\n}\n`;
 }

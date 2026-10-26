@@ -1,0 +1,119 @@
+:root {
+  --g: #39ff6a;
+  --g-dim: #0b3d18;
+  --g-mid: #1a8f3c;
+  --w: #e6ffe9;
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+}
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: #000;
+  color: var(--g);
+  font-size: 12px;
+}
+#ed {
+  display: grid;
+  grid-template-columns: 260px 1fr 380px;
+  height: 100vh;
+}
+aside {
+  padding: 10px;
+  overflow: auto;
+  border-right: 1px solid var(--g-dim);
+}
+#json {
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--g-dim);
+}
+h1 {
+  font-size: 18px;
+  color: var(--w);
+  margin: 0 0 10px;
+  letter-spacing: 3px;
+}
+h2 {
+  font-size: 12px;
+  color: var(--w);
+  margin: 0 0 6px;
+}
+section {
+  margin-bottom: 14px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--g-dim);
+}
+label {
+  display: block;
+  margin: 4px 0;
+}
+input,
+select,
+textarea,
+button {
+  background: #010a03;
+  color: var(--g);
+  border: 1px solid var(--g-mid);
+  font: inherit;
+}
+input:not([type='checkbox']):not([type='file']),
+select {
+  width: 100%;
+  box-sizing: border-box;
+}
+button {
+  cursor: pointer;
+  padding: 3px 8px;
+  margin: 2px 0;
+}
+button:hover {
+  background: var(--g-dim);
+  color: var(--w);
+}
+.btns button {
+  display: block;
+  width: 100%;
+}
+.help {
+  color: var(--g-mid);
+  line-height: 1.5;
+}
+main {
+  position: relative;
+}
+#timeline {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  cursor: crosshair;
+}
+.jhead {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+textarea {
+  flex: 1;
+  resize: none;
+  font-size: 11px;
+  line-height: 1.35;
+  padding: 6px;
+}
+#status .err {
+  color: #ff3b5c;
+  white-space: pre-wrap;
+}
+#status .warn {
+  color: #ffd23b;
+  white-space: pre-wrap;
+}
+#status .ok {
+  color: var(--w);
+}
+#pos {
+  margin-top: 6px;
+  color: var(--w);
+}

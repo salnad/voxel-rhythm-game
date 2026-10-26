@@ -61,8 +61,8 @@ export function deriveModifiers(patch: SynthPatch): AttackModifiers {
   let arcScale = 0;
   let hue = 0;
   TABLE_SHAPES.forEach((s, i) => {
-    arcScale += w[i] * SHAPE_SPAN[s];
-    hue += w[i] * SHAPE_HUE[s];
+    arcScale += w[i]! * SHAPE_SPAN[s];
+    hue += w[i]! * SHAPE_HUE[s];
   });
   const echoCount = Math.max(0, Math.round(patch.unison) - 1);
   return {

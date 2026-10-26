@@ -34,10 +34,23 @@ export function validateChart(input: unknown): ValidationResult {
   const err = (path: string, msg: string) => errors.push(`${path}: ${msg}`);
 
   if (!isObj(input)) {
-    return { ok: false, errors: [`(root): expected a JSON object, got ${describe(input)}`], warnings };
+    return {
+      ok: false,
+      errors: [`(root): expected a JSON object, got ${describe(input)}`],
+      warnings,
+    };
   }
 
-  const known = new Set(['$schema', 'format', 'version', 'meta', 'audio', 'timing', 'lanes', 'notes']);
+  const known = new Set([
+    '$schema',
+    'format',
+    'version',
+    'meta',
+    'audio',
+    'timing',
+    'lanes',
+    'notes',
+  ]);
   for (const k of Object.keys(input)) {
     if (!known.has(k)) warnings.push(`${k}: unknown top-level field is ignored`);
   }
@@ -72,7 +85,10 @@ export function validateChart(input: unknown): ValidationResult {
     const hasFile = audio.file !== undefined;
     const hasProc = audio.procedural !== undefined;
     if (hasFile === hasProc) {
-      err('audio', 'must have exactly one of "file" (audio path) or "procedural" (built-in song name)');
+      err(
+        'audio',
+        'must have exactly one of "file" (audio path) or "procedural" (built-in song name)',
+      );
     }
     if (hasFile && (typeof audio.file !== 'string' || audio.file === '')) {
       err('audio.file', `must be a non-empty string path, got ${describe(audio.file)}`);
@@ -81,7 +97,10 @@ export function validateChart(input: unknown): ValidationResult {
       err('audio.procedural', `must be a non-empty string, got ${describe(audio.procedural)}`);
     }
     if (audio.lengthBeats !== undefined && (!isNum(audio.lengthBeats) || audio.lengthBeats <= 0)) {
-      err('audio.lengthBeats', `must be a positive number if present, got ${describe(audio.lengthBeats)}`);
+      err(
+        'audio.lengthBeats',
+        `must be a positive number if present, got ${describe(audio.lengthBeats)}`,
+      );
     }
   }
 
@@ -94,26 +113,41 @@ export function validateChart(input: unknown): ValidationResult {
       err('timing.bpm', `must be a number between 20 and 400, got ${describe(timing.bpm)}`);
     }
     if (!isNum(timing.offsetMs)) {
-      err('timing.offsetMs', `must be a number (milliseconds into the audio where beat 0 is), got ${describe(timing.offsetMs)}`);
+      err(
+        'timing.offsetMs',
+        `must be a number (milliseconds into the audio where beat 0 is), got ${describe(timing.offsetMs)}`,
+      );
     }
     if (
       timing.beatsPerBar !== undefined &&
-      (!Number.isInteger(timing.beatsPerBar) || (timing.beatsPerBar as number) < 1 || (timing.beatsPerBar as number) > 16)
+      (!Number.isInteger(timing.beatsPerBar) ||
+        (timing.beatsPerBar as number) < 1 ||
+        (timing.beatsPerBar as number) > 16)
     ) {
-      err('timing.beatsPerBar', `must be an integer 1-16 if present, got ${describe(timing.beatsPerBar)}`);
+      err(
+        'timing.beatsPerBar',
+        `must be an integer 1-16 if present, got ${describe(timing.beatsPerBar)}`,
+      );
     }
     if (timing.bpmChanges !== undefined) {
       if (!Array.isArray(timing.bpmChanges)) {
-        err('timing.bpmChanges', `must be an array of {"beat", "bpm"}, got ${describe(timing.bpmChanges)}`);
+        err(
+          'timing.bpmChanges',
+          `must be an array of {"beat", "bpm"}, got ${describe(timing.bpmChanges)}`,
+        );
       } else {
         let last = 0;
         timing.bpmChanges.forEach((c: unknown, i) => {
           const p = `timing.bpmChanges[${i}]`;
-          if (!isObj(c)) return err(p, `must be an object {"beat": number, "bpm": number}, got ${describe(c)}`);
-          if (!isNum(c.beat) || c.beat <= 0) err(`${p}.beat`, `must be a number > 0, got ${describe(c.beat)}`);
-          else if (c.beat <= last) err(`${p}.beat`, `must be greater than the previous change (${last})`);
+          if (!isObj(c))
+            return err(p, `must be an object {"beat": number, "bpm": number}, got ${describe(c)}`);
+          if (!isNum(c.beat) || c.beat <= 0)
+            err(`${p}.beat`, `must be a number > 0, got ${describe(c.beat)}`);
+          else if (c.beat <= last)
+            err(`${p}.beat`, `must be greater than the previous change (${last})`);
           else last = c.beat;
-          if (!isNum(c.bpm) || c.bpm < 20 || c.bpm > 400) err(`${p}.bpm`, `must be 20-400, got ${describe(c.bpm)}`);
+          if (!isNum(c.bpm) || c.bpm < 20 || c.bpm > 400)
+            err(`${p}.bpm`, `must be 20-400, got ${describe(c.bpm)}`);
         });
       }
     }
@@ -121,16 +155,22 @@ export function validateChart(input: unknown): ValidationResult {
 
   // lanes
   const lanes = input.lanes;
-  let laneSet = new Set<string>();
+  const laneSet = new Set<string>();
   if (!Array.isArray(lanes)) {
-    err('lanes', `must be an array of lane names like ["kick", "perc", "bass", "synth"], got ${describe(lanes)}`);
+    err(
+      'lanes',
+      `must be an array of lane names like ["kick", "perc", "bass", "synth"], got ${describe(lanes)}`,
+    );
   } else {
     if (lanes.length < MIN_LANES || lanes.length > MAX_LANES) {
       err('lanes', `must have ${MIN_LANES}-${MAX_LANES} lanes, got ${lanes.length}`);
     }
     lanes.forEach((l: unknown, i) => {
       if (typeof l !== 'string' || !LANE_NAME_PATTERN.test(l)) {
-        err(`lanes[${i}]`, `must be a lowercase name (letters, digits, - or _; starts with a letter), got ${describe(l)}`);
+        err(
+          `lanes[${i}]`,
+          `must be a lowercase name (letters, digits, - or _; starts with a letter), got ${describe(l)}`,
+        );
       } else if (laneSet.has(l)) {
         err(`lanes[${i}]`, `duplicate lane name "${l}"`);
       } else {
@@ -151,7 +191,8 @@ export function validateChart(input: unknown): ValidationResult {
     let unsorted = false;
     notes.forEach((n: unknown, i) => {
       const p = `notes[${i}]`;
-      if (!isObj(n)) return err(p, `must be an object like {"beat": 4, "lane": "kick"}, got ${describe(n)}`);
+      if (!isObj(n))
+        return err(p, `must be an object like {"beat": 4, "lane": "kick"}, got ${describe(n)}`);
       for (const k of Object.keys(n)) {
         if (k !== 'beat' && k !== 'lane' && k !== 'length') {
           warnings.push(`${p}.${k}: unknown note field is ignored`);
@@ -159,7 +200,10 @@ export function validateChart(input: unknown): ValidationResult {
       }
       let ok = true;
       if (!isNum(n.beat) || n.beat < 0) {
-        err(`${p}.beat`, `must be a number >= 0 (beats from beat 0; 0.5 = an eighth note later), got ${describe(n.beat)}`);
+        err(
+          `${p}.beat`,
+          `must be a number >= 0 (beats from beat 0; 0.5 = an eighth note later), got ${describe(n.beat)}`,
+        );
         ok = false;
       }
       if (typeof n.lane !== 'string' || !laneSet.has(n.lane)) {
@@ -167,7 +211,10 @@ export function validateChart(input: unknown): ValidationResult {
         ok = false;
       }
       if (n.length !== undefined && (!isNum(n.length) || n.length < 0)) {
-        err(`${p}.length`, `must be a number of beats >= 0 if present (hold length), got ${describe(n.length)}`);
+        err(
+          `${p}.length`,
+          `must be a number of beats >= 0 if present (hold length), got ${describe(n.length)}`,
+        );
         ok = false;
       }
       if (!ok) return;
@@ -189,7 +236,10 @@ export function validateChart(input: unknown): ValidationResult {
         if (Math.abs(n.beat - prev.beat) < DUPLICATE_EPSILON_BEATS) {
           err('notes', `duplicate note in lane "${n.lane}" at beat ${n.beat}`);
         } else if (n.beat < prev.end - 1e-9) {
-          err('notes', `note in lane "${n.lane}" at beat ${n.beat} starts inside the hold that runs from beat ${prev.beat} to ${prev.end}`);
+          err(
+            'notes',
+            `note in lane "${n.lane}" at beat ${n.beat} starts inside the hold that runs from beat ${prev.beat} to ${prev.end}`,
+          );
         }
       }
       lastByLane.set(n.lane, { beat: n.beat, end: n.beat + (n.length ?? 0) });
@@ -199,7 +249,9 @@ export function validateChart(input: unknown): ValidationResult {
     if (isObj(audio) && isNum(audio.lengthBeats)) {
       const last = outNotes.reduce((m, n) => Math.max(m, n.beat + (n.length ?? 0)), 0);
       if (last > audio.lengthBeats) {
-        warnings.push(`notes: last note ends at beat ${last}, after audio.lengthBeats (${audio.lengthBeats})`);
+        warnings.push(
+          `notes: last note ends at beat ${last}, after audio.lengthBeats (${audio.lengthBeats})`,
+        );
       }
     }
   }

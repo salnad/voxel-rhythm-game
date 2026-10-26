@@ -64,7 +64,9 @@ describe('Judge', () => {
     expect(j.release(0, 1.5)).toMatchObject({ kind: 'holdEnd', judgement: 'miss' });
     j.press(1, 1.01);
     const done = j.update(2.0);
-    expect(done).toEqual([expect.objectContaining({ noteId: 1, kind: 'holdEnd', judgement: 'perfect' })]);
+    expect(done).toEqual([
+      expect.objectContaining({ noteId: 1, kind: 'holdEnd', judgement: 'perfect' }),
+    ]);
     expect(j.finished).toBe(true);
   });
 

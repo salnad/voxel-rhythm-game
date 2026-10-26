@@ -4,7 +4,8 @@
  * (render.ts) and the demo chart (src/chart/demoChart.ts), so they can never drift.
  */
 
-export type Instrument = 'kick' | 'clap' | 'hat' | 'bass' | 'lead' | 'arp' | 'stab' | 'pad' | 'riser';
+export type Instrument =
+  'kick' | 'clap' | 'hat' | 'bass' | 'lead' | 'arp' | 'stab' | 'pad' | 'riser';
 
 export interface CompEvent {
   inst: Instrument;
@@ -36,10 +37,30 @@ const BASS_ROOTS = [37, 33, 40, 35];
 
 /** 4-bar lead melody: [beat, len, midi]. */
 const MELODY: Array<[number, number, number]> = [
-  [0, 0.5, 80], [0.5, 0.5, 80], [1, 0.5, 83], [1.5, 0.5, 80], [2, 0.5, 78], [2.5, 0.5, 76], [3, 1, 73],
-  [4, 0.5, 76], [4.5, 0.5, 76], [5, 0.5, 78], [5.5, 0.5, 80], [6, 1, 85], [7, 1, 83],
-  [8, 0.5, 80], [8.5, 0.5, 83], [9, 1, 88], [10, 0.5, 87], [10.5, 0.5, 83], [11, 1, 80],
-  [12, 1.5, 78], [13.5, 0.5, 75], [14, 0.5, 78], [14.5, 0.5, 80], [15, 1, 83],
+  [0, 0.5, 80],
+  [0.5, 0.5, 80],
+  [1, 0.5, 83],
+  [1.5, 0.5, 80],
+  [2, 0.5, 78],
+  [2.5, 0.5, 76],
+  [3, 1, 73],
+  [4, 0.5, 76],
+  [4.5, 0.5, 76],
+  [5, 0.5, 78],
+  [5.5, 0.5, 80],
+  [6, 1, 85],
+  [7, 1, 83],
+  [8, 0.5, 80],
+  [8.5, 0.5, 83],
+  [9, 1, 88],
+  [10, 0.5, 87],
+  [10.5, 0.5, 83],
+  [11, 1, 80],
+  [12, 1.5, 78],
+  [13.5, 0.5, 75],
+  [14, 0.5, 78],
+  [14.5, 0.5, 80],
+  [15, 1, 83],
 ];
 
 type Section = 'intro' | 'build' | 'drop1' | 'break' | 'drop2' | 'outro';
@@ -76,7 +97,9 @@ export function composeDemo(): CompEvent[] {
           len: 0.2,
           midi: [midi],
           vel: i % 4 === 0 ? 0.9 : 0.55,
-          ...(i % 4 === 0 && !(s === 'build' && bar >= 8) ? { chart: { lane: 'synth' as const } } : {}),
+          ...(i % 4 === 0 && !(s === 'build' && bar >= 8)
+            ? { chart: { lane: 'synth' as const } }
+            : {}),
         });
       }
     }
@@ -91,14 +114,16 @@ export function composeDemo(): CompEvent[] {
     if (s === 'build') kicks = bar < 8 ? [0, 2] : bar === 11 ? [0, 1] : [0, 1, 2, 3];
     if (isDrop) kicks = bar % 2 === 0 ? [0, 1, 1.75, 2.5, 3] : [0, 1, 2, 2.75, 3.5];
     if (s === 'outro' && bar === 52) kicks = [0];
-    for (const k of kicks) add({ inst: 'kick', beat: b0 + k, len: 0.5, midi: [], vel: 1, chart: { lane: 'kick' } });
+    for (const k of kicks)
+      add({ inst: 'kick', beat: b0 + k, len: 0.5, midi: [], vel: 1, chart: { lane: 'kick' } });
 
     // ---- claps
     let claps: number[] = [];
     if (s === 'build') claps = bar < 8 ? [3] : [1, 3];
     if (isDrop) claps = [1, 3];
     if (s === 'break' && bar % 2 === 1) claps = [3];
-    for (const c of claps) add({ inst: 'clap', beat: b0 + c, len: 0.5, midi: [], vel: 1, chart: { lane: 'perc' } });
+    for (const c of claps)
+      add({ inst: 'clap', beat: b0 + c, len: 0.5, midi: [], vel: 1, chart: { lane: 'perc' } });
 
     // ---- build-up snare roll on the last build bar + riser
     if (bar === 11 || bar === 35) {
@@ -138,10 +163,28 @@ export function composeDemo(): CompEvent[] {
 
     // ---- bass
     if (s === 'build') {
-      add({ inst: 'bass', beat: b0, len: 3.5, midi: [root], vel: 0.8, chart: { lane: 'bass', length: 3 } });
+      add({
+        inst: 'bass',
+        beat: b0,
+        len: 3.5,
+        midi: [root],
+        vel: 0.8,
+        chart: { lane: 'bass', length: 3 },
+      });
     } else if (isDrop) {
       const pattern: Array<[number, number]> =
-        bar % 2 === 0 ? [[0, 1.5], [1.75, 0.75], [2.5, 0.5], [3, 1]] : [[0, 2], [2.75, 0.75], [3.5, 0.5]];
+        bar % 2 === 0
+          ? [
+              [0, 1.5],
+              [1.75, 0.75],
+              [2.5, 0.5],
+              [3, 1],
+            ]
+          : [
+              [0, 2],
+              [2.75, 0.75],
+              [3.5, 0.5],
+            ];
       pattern.forEach(([b, len], i) => {
         const midi = i === 2 ? root + 12 : root;
         add({
@@ -155,9 +198,24 @@ export function composeDemo(): CompEvent[] {
         });
       });
     } else if (s === 'break') {
-      add({ inst: 'bass', beat: b0, len: 3.75, midi: [root], vel: 0.6, chart: { lane: 'bass', length: 3 } });
+      add({
+        inst: 'bass',
+        beat: b0,
+        len: 3.75,
+        midi: [root],
+        vel: 0.6,
+        chart: { lane: 'bass', length: 3 },
+      });
     } else if (s === 'outro') {
-      if (bar === 52) add({ inst: 'bass', beat: b0, len: 6, midi: [root], vel: 0.9, chart: { lane: 'bass', length: 4 } });
+      if (bar === 52)
+        add({
+          inst: 'bass',
+          beat: b0,
+          len: 6,
+          midi: [root],
+          vel: 0.9,
+          chart: { lane: 'bass', length: 4 },
+        });
     }
 
     // ---- drop: supersaw stabs + lead melody
@@ -177,12 +235,25 @@ export function composeDemo(): CompEvent[] {
           len,
           midi: [midi + octave],
           vel: 0.8,
-          ...(chartIt ? { chart: len >= 1.5 ? { lane: 'synth' as const, length: len - 0.5 } : { lane: 'synth' as const } } : {}),
+          ...(chartIt
+            ? {
+                chart:
+                  len >= 1.5
+                    ? { lane: 'synth' as const, length: len - 0.5 }
+                    : { lane: 'synth' as const },
+              }
+            : {}),
         });
         if (s === 'drop2' && len >= 1 && bar % 2 === 1) {
           // hyperpop stutter echoes (audio only)
           for (let r = 1; r < 4; r++) {
-            add({ inst: 'lead', beat: beat + r * 0.25, len: 0.15, midi: [midi + octave + 12], vel: 0.4 });
+            add({
+              inst: 'lead',
+              beat: beat + r * 0.25,
+              len: 0.15,
+              midi: [midi + octave + 12],
+              vel: 0.4,
+            });
           }
         }
       }
@@ -191,7 +262,14 @@ export function composeDemo(): CompEvent[] {
 
   // final chord
   add({ inst: 'stab', beat: 52 * 4, len: 4, midi: CHORDS[0]!, vel: 0.8 });
-  add({ inst: 'lead', beat: 52 * 4, len: 3, midi: [85], vel: 0.7, chart: { lane: 'synth', length: 2 } });
+  add({
+    inst: 'lead',
+    beat: 52 * 4,
+    len: 3,
+    midi: [85],
+    vel: 0.7,
+    chart: { lane: 'synth', length: 2 },
+  });
 
   ev.sort((a, b) => a.beat - b.beat);
   return ev;

@@ -1,8 +1,4 @@
-import {
-  ACCURACY_WEIGHT,
-  COMBO_MULTIPLIERS,
-  SCORE_PER_JUDGEMENT,
-} from '../config/gameplay';
+import { ACCURACY_WEIGHT, COMBO_MULTIPLIERS, SCORE_PER_JUDGEMENT } from '../config/gameplay';
 import type { Judgement, JudgementEvent } from './judge';
 
 export class ScoreKeeper {
@@ -40,7 +36,9 @@ export class ScoreKeeper {
     } else {
       this.combo++;
       this.maxCombo = Math.max(this.maxCombo, this.combo);
-      this.score += Math.round(SCORE_PER_JUDGEMENT[e.judgement] * this.multiplier * bonusMultiplier);
+      this.score += Math.round(
+        SCORE_PER_JUDGEMENT[e.judgement] * this.multiplier * bonusMultiplier,
+      );
       if (e.kind !== 'holdEnd') {
         this.recentOffsets.push(e.offset);
         if (this.recentOffsets.length > 40) this.recentOffsets.shift();

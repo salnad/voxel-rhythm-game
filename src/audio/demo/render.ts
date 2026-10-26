@@ -76,43 +76,108 @@ export async function renderDemoSong(sampleRate = 44100): Promise<AudioBuffer> {
   delay.connect(fb).connect(delay);
   delay.connect(delayOut).connect(duck);
 
-  const noise = noiseBuffer(ctx, 2);
   const events = composeDemo();
-
   for (const e of events) if (e.inst === 'kick') sidechain(duck.gain, T(e.beat));
 
-  for (const e of events) {
-    const t = T(e.beat);
-    const len = e.len * spb;
-    switch (e.inst) {
-      case 'kick':
-        kick(ctx, kickBus, noise, t, e.vel);
-        break;
-      case 'clap':
-        clap(ctx, percBus, noise, t, e.vel);
-        break;
-      case 'hat':
-        hat(ctx, percBus, noise, t, e.vel);
-        break;
-      case 'bass':
-        bass(ctx, bassBus, t, len, e);
-        break;
-      case 'lead':
-        lead(ctx, synthBus, t, len, e);
-        break;
-      case 'arp':
-        arp(ctx, synthBus, t, len, e);
-        break;
-      case 'stab':
-        supersaw(ctx, synthBus, t, len, e.midi, e.vel, 0.004, 0.12);
-        break;
-      case 'pad':
-        supersaw(ctx, synthBus, t, len, e.midi, e.vel * 0.6, 0.6, 0.8);
-        break;
-      case 'riser':
-        riser(ctx, percBus, noise, t, len, e.vel);
-        break;
+  // Each unique voice (instrument + pitch + length) is rendered once in its own small
+  // offline context, then summed into per-bus buffers in plain JS. Only the bus effects
+  // run in the big context. (One oscillator graph per note took over a minute to render.)
+  type Bus = 'kick' | 'perc' | 'bass' | 'synth';
+  const busOf: Record<CompEvent['inst'], Bus> = {
+    kick: 'kick',
+    clap: 'perc',
+    hat: 'perc',
+    riser: 'perc',
+    bass: 'bass',
+    lead: 'synth',
+    arp: 'synth',
+    stab: 'synth',
+    pad: 'synth',
+  };
+  const busNode: Record<Bus, AudioNode> = {
+    kick: kickBus,
+    perc: percBus,
+    bass: bassBus,
+    synth: synthBus,
+  };
+  const voices = new Map<string, Promise<AudioBuffer>>();
+  const keyed = events.map((e) => {
+    const key = voiceKey(e);
+    if (!voices.has(key)) voices.set(key, renderVoice(e, spb, sampleRate));
+    return { e, key };
+  });
+  const buffers = new Map<string, AudioBuffer>();
+  await Promise.all([...voices].map(async ([k, p]) => buffers.set(k, await p)));
+
+  const frames = ctx.length;
+  const mixes = {} as Record<Bus, AudioBuffer>;
+  for (const b of Object.keys(busNode) as Bus[]) mixes[b] = ctx.createBuffer(2, frames, sampleRate);
+  for (const { e, key } of keyed) {
+    const v = buffers.get(key)!;
+    const mix = mixes[busOf[e.inst]];
+    const at = Math.round(T(e.beat) * sampleRate);
+    for (let ch = 0; ch < 2; ch++) {
+      const src = v.getChannelData(Math.min(ch, v.numberOfChannels - 1));
+      const dst = mix.getChannelData(ch);
+      const n = Math.min(src.length, frames - at);
+      for (let i = 0; i < n; i++) dst[at + i]! += src[i]! * e.vel;
     }
+  }
+  for (const b of Object.keys(busNode) as Bus[]) {
+    const src = ctx.createBufferSource();
+    src.buffer = mixes[b];
+    src.connect(busNode[b]);
+    src.start(0);
+  }
+  return ctx.startRendering();
+}
+
+function voiceKey(e: CompEvent): string {
+  switch (e.inst) {
+    case 'kick':
+    case 'clap':
+    case 'hat':
+      return e.inst;
+    default:
+      return `${e.inst}:${e.midi.join(',')}:${e.len}:${e.glideFrom ?? ''}`;
+  }
+}
+
+async function renderVoice(e: CompEvent, spb: number, sampleRate: number): Promise<AudioBuffer> {
+  const len = e.len * spb;
+  const tail = e.inst === 'pad' ? 1 : 0.4;
+  const ctx = new OfflineAudioContext(2, Math.ceil((len + tail) * sampleRate), sampleRate);
+  const out = ctx.destination;
+  const noise = noiseBuffer(ctx, 2);
+  const unit = { ...e, vel: 1 };
+  switch (e.inst) {
+    case 'kick':
+      kick(ctx, out, noise, 0, 1);
+      break;
+    case 'clap':
+      clap(ctx, out, noise, 0, 1);
+      break;
+    case 'hat':
+      hat(ctx, out, noise, 0, 1);
+      break;
+    case 'bass':
+      bass(ctx, out, 0, len, unit);
+      break;
+    case 'lead':
+      lead(ctx, out, 0, len, unit);
+      break;
+    case 'arp':
+      arp(ctx, out, 0, len, unit);
+      break;
+    case 'stab':
+      supersaw(ctx, out, 0, len, e.midi, 1, 0.004, 0.12);
+      break;
+    case 'pad':
+      supersaw(ctx, out, 0, len, e.midi, 0.6, 0.6, 0.8);
+      break;
+    case 'riser':
+      riser(ctx, out, noise, 0, len, 1);
+      break;
   }
   return ctx.startRendering();
 }
@@ -123,7 +188,14 @@ function sidechain(g: AudioParam, t: number) {
   g.linearRampToValueAtTime(1, t + 0.22);
 }
 
-function env(ctx: BaseAudioContext, t: number, peak: number, attack: number, hold: number, release: number) {
+function env(
+  ctx: BaseAudioContext,
+  t: number,
+  peak: number,
+  attack: number,
+  hold: number,
+  release: number,
+) {
   const g = ctx.createGain();
   g.gain.setValueAtTime(0, t);
   g.gain.linearRampToValueAtTime(peak, t + attack);
@@ -167,7 +239,7 @@ function clap(ctx: BaseAudioContext, bus: AudioNode, noise: AudioBuffer, t: numb
   g.gain.linearRampToValueAtTime(vel * 0.8, t + 0.035);
   g.gain.exponentialRampToValueAtTime(0.0001, t + 0.2);
   n.connect(bp).connect(g).connect(bus);
-  n.start(t, Math.random() * 1.5, 0.25);
+  n.start(t, 0.4, 0.25);
   const body = ctx.createOscillator();
   body.type = 'triangle';
   body.frequency.setValueAtTime(240, t);
@@ -186,7 +258,7 @@ function hat(ctx: BaseAudioContext, bus: AudioNode, noise: AudioBuffer, t: numbe
   hp.frequency.value = 8500;
   const g = env(ctx, t, 0.45 * vel, 0.001, 0.005, 0.035);
   n.connect(hp).connect(g).connect(bus);
-  n.start(t, Math.random() * 1.5, 0.06);
+  n.start(t, 0.9, 0.06);
 }
 
 function bass(ctx: BaseAudioContext, bus: AudioNode, t: number, len: number, e: CompEvent) {
@@ -302,7 +374,14 @@ function arp(ctx: BaseAudioContext, bus: AudioNode, t: number, len: number, e: C
   o.stop(t + len + 0.1);
 }
 
-function riser(ctx: BaseAudioContext, bus: AudioNode, noise: AudioBuffer, t: number, len: number, vel: number) {
+function riser(
+  ctx: BaseAudioContext,
+  bus: AudioNode,
+  noise: AudioBuffer,
+  t: number,
+  len: number,
+  vel: number,
+) {
   const n = ctx.createBufferSource();
   n.buffer = noise;
   n.loop = true;

@@ -60,11 +60,11 @@ export const FIELD = {
   /** Distance from the player at which an enemy is struck when its note is judged. */
   strikeRadius: 2.1,
   /** World units per second enemies move toward the player. */
-  approachSpeed: 7.5,
+  approachSpeed: 8.5,
   /** Enemies appear when farther than this would be needed (they fade in). */
   spawnDistance: 26,
   /** Lane tracks fan out over this angle (degrees) around the player's facing direction. */
-  laneFanDegrees: 70,
+  laneFanDegrees: 64,
 };
 
 export const AUTOPLAY = {

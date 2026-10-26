@@ -29,7 +29,7 @@ export class Judge {
   private readonly holding: (Note | null)[];
 
   constructor(
-    private readonly notes: readonly Note[],
+    notes: readonly Note[],
     laneCount: number,
     private readonly windows: JudgementWindows,
   ) {
@@ -74,7 +74,14 @@ export class Judge {
       }
       this.state[n.id] = 'done';
       this.advance(lane);
-      return { noteId: n.id, lane, kind: n.endTime !== null ? 'holdStart' : 'tap', judgement, offset, time };
+      return {
+        noteId: n.id,
+        lane,
+        kind: n.endTime !== null ? 'holdStart' : 'tap',
+        judgement,
+        offset,
+        time,
+      };
     }
     return null;
   }
@@ -98,7 +105,14 @@ export class Judge {
       if (h && h.endTime !== null && time >= h.endTime) {
         this.holding[lane] = null;
         this.state[h.id] = 'done';
-        out.push({ noteId: h.id, lane, kind: 'holdEnd', judgement: 'perfect', offset: 0, time: h.endTime });
+        out.push({
+          noteId: h.id,
+          lane,
+          kind: 'holdEnd',
+          judgement: 'perfect',
+          offset: 0,
+          time: h.endTime,
+        });
       }
       const list = this.byLane[lane]!;
       for (let i = this.cursor[lane]!; i < list.length; i++) {
