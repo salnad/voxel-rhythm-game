@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { composeDemo } from '../src/audio/demo/composition';
+import { composeDemo, DEMO_COMBOS } from '../src/audio/demo/composition';
 import { buildChart } from '../src/chart/build';
 import { buildDemoChart } from '../src/chart/demoChart';
 import { ACTIONS } from '../src/chart/types';
 import { ClockSync } from '../src/core/clockSync';
 import { GameSession } from '../src/game/session';
-import { autoplayInputs } from '../src/rhythm/input';
+import { AutoPlayer } from '../src/rhythm/input';
+import { simulate } from './helpers';
 import { deriveModifiers, easeForWeights, morphWeights } from '../src/synth/modifiers';
 import { DEFAULT_PATCH } from '../src/synth/patch';
 
@@ -52,14 +53,29 @@ describe('demo song and charts', () => {
   const easy = buildChart(buildDemoChart('easy'));
   const spb = 60 / 160;
 
-  it('every kick, clap, rim and crash is a normal-chart cue with the matching action', () => {
-    const drums = composeDemo().filter((e) => ['kick', 'clap', 'rim', 'impact'].includes(e.inst));
-    const actionOf = { kick: 'block', clap: 'slash', rim: 'stab', impact: 'flourish' } as const;
-    expect(drums.length).toBe(normal.notes.length);
-    drums.forEach((d, i) => {
-      expect(normal.notes[i]!.beat).toBe(d.beat);
-      expect(normal.notes[i]!.action).toBe(actionOf[d.inst as keyof typeof actionOf]);
+  it('every cue is an onset in its part: 808 = block, lead = slash, perc = stab, vocal = flourish', () => {
+    const partOf = { block: 'k808', slash: 'lead', stab: 'perc', flourish: 'vox' } as const;
+    const charted = composeDemo().filter((e) => e.chart);
+    expect(charted.length).toBe(normal.notes.length);
+    charted.forEach((e, i) => {
+      const n = normal.notes[i]!;
+      expect(n.beat).toBe(e.beat);
+      expect(n.action).toBe(e.chart!.action);
+      expect(e.part).toBe(partOf[n.action]);
     });
+  });
+
+  it('has boss combos in both charts, each leaving its last beat free', () => {
+    for (const chart of [normal, easy]) {
+      const comboBars = chart.bars.filter((b) => b.combo);
+      expect(comboBars.length).toBe(DEMO_COMBOS.reduce((n, c) => n + c.toBar - c.fromBar + 1, 0));
+      for (const b of comboBars) {
+        for (const id of b.noteIds) {
+          const n = chart.notes[id]!;
+          expect((n.endBeat ?? n.beat) - b.startBeat).toBeLessThanOrEqual(chart.beatsPerBar - 1);
+        }
+      }
+    }
   });
 
   it('easy is a subset of normal (same beats, same actions)', () => {
@@ -112,7 +128,7 @@ describe('demo song and charts', () => {
 
   it('every enemy ends on a flourish (the crash on the downbeat)', () => {
     for (const chart of [normal, easy]) {
-      expect(chart.encounters.length).toBe(12);
+      expect(chart.encounters.length).toBe(11);
       for (const e of chart.encounters) {
         expect(chart.notes[e.noteIds[e.noteIds.length - 1]!]!.action).toBe('flourish');
       }
@@ -125,12 +141,31 @@ describe('GameSession pipeline', () => {
     for (const d of ['normal', 'easy'] as const) {
       const chart = buildChart(buildDemoChart(d));
       const s = new GameSession(chart, { noFail: true });
-      const inputs = autoplayInputs(chart.notes, 0.012, 0, 1);
-      s.step(inputs, chart.lastNoteTime + 1);
+      simulate(s, [], chart.lastNoteTime + 1, new AutoPlayer(0.012, 0, 1), 0.01);
       expect(s.finished).toBe(true);
       expect(s.score.accuracy).toBeGreaterThan(0.9);
       expect(s.duel.defeated).toBe(chart.encounters.length);
       expect(s.duel.hitsTaken).toBe(0);
+      expect(s.combosFailed).toBe(0);
     }
+  });
+
+  it('a fumbled boss combo repeats its measure, and the song still finishes', () => {
+    const chart = buildChart(buildDemoChart('normal'));
+    const s = new GameSession(chart, { noFail: true });
+    const measure = 4 * (60 / 160) * (160 / 155);
+    simulate(
+      s,
+      [],
+      chart.lastNoteTime + 2 * measure + 1,
+      new AutoPlayer(0.01, 0, 1, [41, 57]),
+      0.01,
+    );
+    expect(s.combosFailed).toBe(2);
+    expect(s.conductor.plays.filter((p) => p.bar === 41).map((p) => p.attempt)).toEqual([1, 2]);
+    expect(s.conductor.plays.filter((p) => p.bar === 57).map((p) => p.attempt)).toEqual([1, 2]);
+    expect(s.duel.hitsTaken).toBe(2);
+    expect(s.duel.defeated).toBe(chart.encounters.length);
+    expect(s.finished).toBe(true);
   });
 });

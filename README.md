@@ -12,7 +12,12 @@ translucent highway on the arena floor that runs from the distance, through the 
 hit line just in front of the hero. Cue, telegraph and sword sit in the same small part of
 the screen, so your eyes never leave the fight.
 
-Prototype stage. Matrix green-on-black styling, procedural hyperpop demo song, no copyrighted audio.
+Boss phrases are **measure-based combos**: miss once inside a combo measure and you take damage,
+the music glitches out for the rest of the measure, and the same measure repeats so you can try
+again. The song's timeline is adaptive: the music is scheduled measure by measure.
+
+Prototype stage. Matrix green-on-black styling, procedural digicore demo song (distorted 808s,
+glitchy hat rolls, pluck lead, formant vocal chops, bitcrush), no copyrighted audio.
 
 ## Run
 
@@ -40,8 +45,8 @@ URL flags (handy for demos and tests): `?map=demo&autostart=1` starts the demo s
 
 | Key             | Action                                                                    |
 | --------------- | ------------------------------------------------------------------------- |
-| `F` `G` `H` `J` | BLOCK / SLASH / STAB / FLOURISH. Hold for long cues (blade locks).        |
-| presets         | `A S D F`, arrows `← ↓ ↑ →`, or `D F J K` in Settings; or rebind each key |
+| `A` `S` `D` `F` | BLOCK / SLASH / STAB / FLOURISH. Hold for long cues (blade locks).        |
+| presets         | `F G H J`, arrows `← ↓ ↑ →`, or `D F J K` in Settings; or rebind each key |
 | click/touch     | the lane nearest the pointer                                              |
 | `Esc`           | pause / resume                                                            |
 | `Tab`           | expand / collapse the sword synth panel                                   |
@@ -50,7 +55,9 @@ URL flags (handy for demos and tests): `?map=demo&autostart=1` starts the demo s
 Every key press plays its move on the hero, cue or not. A press that lands on a cue connects
 (sparks, damage, the enemy reacts). Misses have the matching consequence: a missed block means
 the enemy's attack hits you, a missed slash or stab lets the enemy recover its guard, and
-missing an enemy's last cue lets it escape.
+missing an enemy's last cue lets it escape. Inside a boss combo (gold rails on the highway) any
+miss costs HP, voids the rest of the measure, makes the music wonky until the bar line, and the
+measure repeats (up to 2 retries; the rails turn red and read RETRY 1/2).
 
 Before playing seriously, run **Calibrate offset** from the menu (tap Space to a metronome). The results
 screen also suggests an offset from your average hit timing.
@@ -58,10 +65,13 @@ screen also suggests an offset from your average hit timing.
 ## How it fits together
 
 ```
+   Conductor (game/conductor.ts)  pure; plans measure plays ahead, re-plans a failed combo as a retry
+        │  Cue {chart note × measure play, game times}
+        ▼
 keyboard / touch / autoplay
         │  LaneInput {lane, down, time}   ← time converted from event.timeStamp via the audio clock
         ▼
-   Judge (rhythm/judge.ts)        pure; windows in config/gameplay.ts
+   Judge (rhythm/judge.ts)        pure; cues are added as measures are planned, voided on a failed combo
         │  JudgementEvent {noteId, lane, kind: tap|holdStart|holdEnd, judgement, offset}
         ▼
    resolveJudgement (combat/director.ts) + AttackModifiers (synth/modifiers.ts ← synth/patch.ts)
@@ -70,12 +80,28 @@ keyboard / touch / autoplay
    DuelSim (combat/duel.ts)       one enemy per encounter, HP, guard pips, echo-parry charges
         │  DuelEvent {enemyEnter | blocked | struck | released | playerHit | parry | recovered | defeated | escaped}
         ▼
-   GameSession.bus  →  ArenaView (Three.js: hero, enemy, 3D highway) · HudOverlay (2D) · DOM HUD · Sfx
+   GameSession.bus  →  ArenaView (Three.js: hero, enemy, 3D highway) · HudOverlay (2D) · DOM HUD
+                    →  MusicEngine (stems, measure scheduler, wonky FX) · action-music layer (swappable)
 
    telegraphAt (combat/telegraph.ts): pure; which cue the enemy is winding up for, and how far along
 ```
 
-- **Audio clock** (`audio/songPlayer.ts`, `core/clockSync.ts`). Song time is the audio-file position
+- **Adaptive timeline** (`game/conductor.ts`). The chart is a list of measures. The conductor plans
+  measure plays a few seconds ahead, assuming success, and instantiates each measure's notes as cues
+  with game times. When a combo measure fails, everything planned after it is dropped and the same
+  measure is planned again (retry cap per combo, default 2). Game time equals chart time until the
+  first retry. Combo measures keep their last beat empty, so the decision is always made before
+  the music has to be committed (150 ms lookahead).
+- **Music engine** (`audio/musicEngine.ts`). Plays the map as stems (the demo renders 808, lead, perc,
+  vocal and backing stems; audio-file maps are one "mix" stem), each through its own gain node.
+  Stems play continuously while measures follow each other, and crossfade-jump to a measure's offset
+  when it repeats. A failed combo triggers the wonky FX (bitcrush, pitch wobble, stutter gate,
+  tape-stop) until the bar line; the next measure always resyncs.
+- **Action → music layer** (`audio/musicLayers.ts`, registry in `config/musicMapping.ts`). How moves
+  interact with the song is a swappable layer that listens to session events and drives the engine's
+  part gains, its music bus or its own sounds. Settings → "actions → music" picks one. The default
+  here just plays sword sounds.
+- **Audio clock** (`audio/musicEngine.ts`, `core/clockSync.ts`). Game time is the timeline position
   the player is _hearing_: AudioContext time (via `getOutputTimestamp`, falling back to
   `currentTime - outputLatency`), smoothed against `performance.now()`, minus the user's audio offset.
   Inputs are timestamped from `KeyboardEvent.timeStamp`, so judgement precision doesn't depend on
@@ -100,12 +126,13 @@ keyboard / touch / autoplay
 
 ```
 src/
-  audio/        SongPlayer (clock), Sfx, demo/ composition + renderer
+  audio/        MusicEngine (clock + adaptive scheduler), action-music layers, lead voice, Sfx,
+                SongPlayer (editor/calibration), demo/ composition + stem renderer
   chart/        types, tempo map, validation, runtime build (encounters, prompts), demo chart generator
   combat/       director (judgement → duel action), duel (enemies, HP, consequences), telegraph
   config/       gameplay / actions / visuals tuning
   core/         event bus, clock sync, settings (key presets)
-  game/         session (pipeline), runner (frame loop), maps (loading + editor handoff)
+  game/         conductor (adaptive measure plan), session (pipeline), runner (frame loop), maps
   render/       arena view, 3D highway, hero animator, enemy rig, HUD overlay, effects, icons, rain
   rhythm/       judge, score, input (keyboard + autoplay)
   synth/        patch (data model), modifiers (patch → move modifiers)
@@ -119,20 +146,23 @@ tests/          vitest
 
 ## The demo map's ramp
 
-`NEON//DAEMON` (160 BPM, about 100 s) is arranged around the tutorial:
+`DAEMON.EXE` (digicore, 155 BPM, about 104 s without retries) is arranged around the tutorial.
+Each action is tied to a part: 808 = BLOCK, lead = SLASH, snare/hat rolls = STAB, vocal chops =
+FLOURISH. Every cue is an onset in its part, and easy is a subset of normal:
 
-| Bars  | Section | What you learn                                                                |
-| ----- | ------- | ----------------------------------------------------------------------------- |
-| 0-9   | intro   | BLOCK alone on the kick, one per bar; then BLOCK + SLASH (clap) every 2 beats |
-| 10-15 | verse   | STAB (rim tick) joins; first light mixing                                     |
-| 16    | build   | first FLOURISH on the crash finishes the training grunt                       |
-| 16-23 | build   | two short duels mixing all four on quarter notes (normal adds a few eighths)  |
-| 24-39 | drop 1  | four enemies, 4 bars each, each finished on the downbeat crash                |
-| 40-47 | break   | a knight; normal adds blade locks (held blocks) on the sustained bass         |
-| 48-63 | drop 2  | densest section, four enemies, the last one is the DAEMON                     |
+| Bars  | Section | What you learn                                                                       |
+| ----- | ------- | ------------------------------------------------------------------------------------ |
+| 0-9   | intro   | BLOCK alone on the 808, one per bar; then BLOCK + SLASH (lead) every 2 beats         |
+| 10-15 | verse   | STAB (snare) joins, half-time; light mixing                                          |
+| 16    | build   | first FLOURISH on the crash finishes the training grunt                              |
+| 16-23 | build   | two short duels mixing all four on quarter notes (normal adds a few eighths)         |
+| 24-39 | drop 1  | four enemies, 4 bars each, each finished on the downbeat crash                       |
+| 40-47 | break   | half-time; first BOSS COMBOS (bars 41-46) against a knight; normal adds a blade lock |
+| 48-63 | drop 2  | densest section; the DAEMON fights in combos every measure (bars 57-63)              |
 
 Easy never puts two cues closer than a beat. Normal peaks around 4 to 5 cues per second
-(playtest 1's normal chart was about 8).
+(playtest 1's normal chart was about 8). `?failbars=41,57` with `&autoplay=1` makes the bot fumble
+those combos once, to watch the retry loop.
 
 ## Maps
 

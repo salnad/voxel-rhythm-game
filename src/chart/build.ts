@@ -1,7 +1,9 @@
 import { TempoMap } from './tempo';
+import { DEFAULT_COMBO_RETRIES } from './validate';
 import {
   ACTIONS,
   ENEMY_KINDS,
+  type Bar,
   type ChartEncounter,
   type ChartFile,
   type Encounter,
@@ -20,9 +22,11 @@ export interface Chart {
   notes: Note[];
   encounters: Encounter[];
   prompts: Prompt[];
+  /** Every measure from 0 to the end of the song (or 1 bar past the last note). */
+  bars: Bar[];
   tempo: TempoMap;
   beatsPerBar: number;
-  /** Time (s) the last note ends. */
+  /** Chart time (s) the last note ends. */
   lastNoteTime: number;
 }
 
@@ -44,6 +48,8 @@ export function encounterStarts(file: ChartFile): ChartEncounter[] {
 export function buildChart(file: ChartFile): Chart {
   const tempo = new TempoMap(file.timing.bpm, file.timing.offsetMs, file.timing.bpmChanges ?? []);
   const starts = encounterStarts(file);
+  const bpb = file.timing.beatsPerBar ?? 4;
+  const barOf = (beat: number) => Math.floor(beat / bpb + 1e-9);
   const encounterOf = (beat: number) => {
     let k = 0;
     for (let i = 0; i < starts.length; i++) if (starts[i]!.beat <= beat + 1e-9) k = i;
@@ -61,6 +67,7 @@ export function buildChart(file: ChartFile): Chart {
         endBeat,
         endTime: endBeat === null ? null : tempo.beatToSec(endBeat),
         encounter: encounterOf(n.beat),
+        bar: barOf(n.beat),
       };
     })
     .sort((a, b) => a.time - b.time || a.lane - b.lane);
@@ -93,14 +100,35 @@ export function buildChart(file: ChartFile): Chart {
     .sort((a, b) => a.time - b.time);
 
   const lastNoteTime = notes.reduce((m, n) => Math.max(m, n.endTime ?? n.time), 0);
+  const lastBeat = notes.reduce((m, n) => Math.max(m, n.endBeat ?? n.beat), 0);
+  const barCount = Math.max(barOf(lastBeat) + 2, Math.ceil((file.audio.lengthBeats ?? 0) / bpb));
+  const comboOf = (bar: number) => {
+    const c = (file.combos ?? []).find((r) => bar >= r.fromBar && bar <= (r.toBar ?? r.fromBar));
+    return c ? { retries: c.retries ?? DEFAULT_COMBO_RETRIES } : null;
+  };
+  const bars: Bar[] = [];
+  for (let i = 0; i < barCount; i++) {
+    const startBeat = i * bpb;
+    const startSec = tempo.beatToSec(startBeat);
+    const noteIds = notes.filter((n) => n.bar === i).map((n) => n.id);
+    bars.push({
+      index: i,
+      startBeat,
+      startSec,
+      durSec: tempo.beatToSec(startBeat + bpb) - startSec,
+      noteIds,
+      combo: noteIds.length > 0 ? comboOf(i) : null,
+    });
+  }
   return {
     file,
     lanes: ACTIONS,
     notes,
     encounters,
     prompts,
+    bars,
     tempo,
-    beatsPerBar: file.timing.beatsPerBar ?? 4,
+    beatsPerBar: bpb,
     lastNoteTime,
   };
 }

@@ -1,23 +1,40 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://voxel-rhythm.local/schema/chart.schema.json",
-  "title": "Voxel Rhythm chart (version 2: action lanes)",
+  "title": "Voxel Rhythm chart (version 3: action lanes + boss combos)",
   "description": "A map = an audio file + this chart. Every chart has four action lanes: block, slash, stab, flourish. Times are in beats; seconds = offsetMs/1000 + beat * 60 / bpm (piecewise with bpmChanges). One action at a time. See docs/map-format.md.",
   "type": "object",
   "required": ["format", "version", "meta", "audio", "timing", "notes"],
   "properties": {
-    "$schema": { "type": "string" },
-    "format": { "const": "voxel-rhythm-chart" },
-    "version": { "const": 2 },
+    "$schema": {
+      "type": "string"
+    },
+    "format": {
+      "const": "voxel-rhythm-chart"
+    },
+    "version": {
+      "const": 3
+    },
     "meta": {
       "type": "object",
       "required": ["title"],
       "properties": {
-        "title": { "type": "string", "minLength": 1 },
-        "artist": { "type": "string" },
-        "charter": { "type": "string" },
-        "difficulty": { "type": "string" },
-        "description": { "type": "string" }
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "artist": {
+          "type": "string"
+        },
+        "charter": {
+          "type": "string"
+        },
+        "difficulty": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        }
       }
     },
     "audio": {
@@ -32,30 +49,55 @@
         "procedural": {
           "type": "string",
           "minLength": 1,
-          "description": "Built-in procedural song, e.g. hyperpop-demo."
+          "description": "Built-in procedural song, e.g. digicore-demo."
         },
-        "lengthBeats": { "type": "number", "exclusiveMinimum": 0 }
+        "lengthBeats": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        }
       },
-      "oneOf": [{ "required": ["file"] }, { "required": ["procedural"] }]
+      "oneOf": [
+        {
+          "required": ["file"]
+        },
+        {
+          "required": ["procedural"]
+        }
+      ]
     },
     "timing": {
       "type": "object",
       "required": ["bpm", "offsetMs"],
       "properties": {
-        "bpm": { "type": "number", "minimum": 20, "maximum": 400 },
+        "bpm": {
+          "type": "number",
+          "minimum": 20,
+          "maximum": 400
+        },
         "offsetMs": {
           "type": "number",
           "description": "Milliseconds into the audio where beat 0 lands."
         },
-        "beatsPerBar": { "type": "integer", "minimum": 1, "maximum": 16 },
+        "beatsPerBar": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 16
+        },
         "bpmChanges": {
           "type": "array",
           "items": {
             "type": "object",
             "required": ["beat", "bpm"],
             "properties": {
-              "beat": { "type": "number", "exclusiveMinimum": 0 },
-              "bpm": { "type": "number", "minimum": 20, "maximum": 400 }
+              "beat": {
+                "type": "number",
+                "exclusiveMinimum": 0
+              },
+              "bpm": {
+                "type": "number",
+                "minimum": 20,
+                "maximum": 400
+              }
             }
           }
         }
@@ -69,9 +111,16 @@
         "type": "object",
         "required": ["beat"],
         "properties": {
-          "beat": { "type": "number", "minimum": 0 },
-          "enemy": { "enum": ["grunt", "duelist", "brute", "knight"] },
-          "name": { "type": "string" }
+          "beat": {
+            "type": "number",
+            "minimum": 0
+          },
+          "enemy": {
+            "enum": ["grunt", "duelist", "brute", "knight"]
+          },
+          "name": {
+            "type": "string"
+          }
         }
       }
     },
@@ -82,10 +131,47 @@
         "type": "object",
         "required": ["beat", "text"],
         "properties": {
-          "beat": { "type": "number", "minimum": 0 },
-          "text": { "type": "string", "minLength": 1 },
-          "action": { "enum": ["block", "slash", "stab", "flourish"] },
-          "beats": { "type": "number", "exclusiveMinimum": 0, "description": "Default 8." }
+          "beat": {
+            "type": "number",
+            "minimum": 0
+          },
+          "text": {
+            "type": "string",
+            "minLength": 1
+          },
+          "action": {
+            "enum": ["block", "slash", "stab", "flourish"]
+          },
+          "beats": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "Default 8."
+          }
+        }
+      }
+    },
+    "combos": {
+      "type": "array",
+      "description": "Optional boss combos. Every measure from fromBar to toBar (inclusive) that has cues is a combo: miss any cue and the rest is voided, you take damage, the music goes wonky for the rest of the measure, and the measure repeats (up to retries times). Combo cues must leave the measure's last beat empty.",
+      "items": {
+        "type": "object",
+        "required": ["fromBar"],
+        "properties": {
+          "fromBar": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Bar n starts at beat n * beatsPerBar."
+          },
+          "toBar": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "retries": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 5,
+            "description": "Default 2."
+          }
         }
       }
     },
@@ -110,9 +196,13 @@
             "description": "Hold length in beats; omit for a tap."
           }
         },
-        "not": { "required": ["lane"] }
+        "not": {
+          "required": ["lane"]
+        }
       }
     }
   },
-  "not": { "required": ["lanes"] }
+  "not": {
+    "required": ["lanes"]
+  }
 }

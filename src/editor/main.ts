@@ -11,7 +11,7 @@ import {
 } from '../chart/types';
 import { parseChartText, validateChart } from '../chart/validate';
 import { ACTION_SPECS } from '../config/actions';
-import { proceduralSong, saveHandoff } from '../game/maps';
+import { proceduralMix, saveHandoff } from '../game/maps';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const canvas = $<HTMLCanvasElement>('timeline');
@@ -64,7 +64,7 @@ const esc = (s: string) => s.replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
 async function loadAudioFor(c: ChartFile) {
   if (c.audio.procedural) {
     status('rendering procedural song…');
-    audio = await proceduralSong(c.audio.procedural);
+    audio = await proceduralMix(c.audio.procedural);
     audioBytes = null;
   }
   if (audio) player.setBuffer(audio);
@@ -121,7 +121,7 @@ $('b-new').onclick = () => {
     format: CHART_FORMAT_ID,
     version: CHART_FORMAT_VERSION,
     meta: { title: $<HTMLInputElement>('n-title').value || 'Untitled', charter: 'me' },
-    audio: file ? { file: file.name } : { procedural: 'hyperpop-demo' },
+    audio: file ? { file: file.name } : { procedural: 'digicore-demo' },
     timing: {
       bpm: Number($<HTMLInputElement>('n-bpm').value),
       offsetMs: Number($<HTMLInputElement>('n-offset').value),

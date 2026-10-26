@@ -1,3 +1,5 @@
+import { DEFAULT_MUSIC_MAPPING } from '../config/musicMapping';
+
 /** Player settings persisted to localStorage. */
 export interface Settings {
   /** Audio offset in ms. Positive if you hit late / hear audio late. */
@@ -12,12 +14,14 @@ export interface Settings {
   hitsoundVolume: number;
   noFail: boolean;
   difficulty: 'normal' | 'easy';
+  /** Key into MUSIC_MAPPINGS: how actions interact with the music. */
+  musicMapping: string;
 }
 
 /** Key presets offered in Settings. The first is the default. */
 export const KEY_PRESETS: ReadonlyArray<{ name: string; keys: readonly string[] }> = [
-  { name: 'F G H J', keys: ['KeyF', 'KeyG', 'KeyH', 'KeyJ'] },
   { name: 'A S D F', keys: ['KeyA', 'KeyS', 'KeyD', 'KeyF'] },
+  { name: 'F G H J', keys: ['KeyF', 'KeyG', 'KeyH', 'KeyJ'] },
   { name: 'ARROWS', keys: ['ArrowLeft', 'ArrowDown', 'ArrowUp', 'ArrowRight'] },
   { name: 'D F J K', keys: ['KeyD', 'KeyF', 'KeyJ', 'KeyK'] },
 ];
@@ -31,9 +35,10 @@ export const DEFAULT_SETTINGS: Settings = {
   hitsoundVolume: 0.35,
   noFail: true,
   difficulty: 'easy',
+  musicMapping: DEFAULT_MUSIC_MAPPING,
 };
 
-const KEY = 'voxel-rhythm.settings.v2';
+const KEY = 'voxel-rhythm.settings.v3';
 
 /** Short label for a KeyboardEvent.code, for HUD and menus. */
 export function keyLabel(code: string): string {

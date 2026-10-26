@@ -13,7 +13,7 @@ export interface EnemyStatus {
   state: EnemyState;
   /** Song time the current state began. */
   stateTime: number;
-  /** Offensive cues (slash/stab/flourish) left to land: the enemy's guard pips. */
+  /** Offensive chart notes (slash/stab/flourish) not landed yet: the enemy's guard pips. */
   guard: number;
   guardMax: number;
 }
@@ -41,7 +41,15 @@ export type DuelEvent =
       time: number;
     }
   | { type: 'released'; noteId: number; encounter: number; action: Action; time: number }
-  | { type: 'playerHit'; noteId: number; encounter: number; damage: number; time: number }
+  | {
+      type: 'playerHit';
+      noteId: number;
+      encounter: number;
+      damage: number;
+      /** True when the hit came from a failed combo. */
+      combo: boolean;
+      time: number;
+    }
   | { type: 'parry'; noteId: number; encounter: number; time: number }
   | { type: 'recovered'; noteId: number; encounter: number; action: Action; time: number }
   | { type: 'defeated'; noteId: number; encounter: number; time: number }
@@ -49,15 +57,17 @@ export type DuelEvent =
   | { type: 'playerDown'; time: number };
 
 /**
- * Deterministic duel state. One enemy at a time: encounter k's enemy walks in at its start
- * time and duels through its cues. Consequences follow the action:
+ * Deterministic duel state, keyed by cue (a chart note played in one measure play).
+ * One enemy at a time: encounter k's enemy walks in at its start time and duels through
+ * its cues. Consequences follow the action:
  *  - missed BLOCK: the enemy's attack lands (HP loss) unless an echo-parry charge absorbs it
  *  - missed SLASH / STAB / mid-phrase FLOURISH: the enemy recovers its guard
- *  - the encounter's last cue: hit it and the enemy is defeated, miss it and it escapes
+ *  - any miss inside a boss combo: HP loss (the combo then voids and repeats; see session)
+ *  - the encounter's final cue: hit it and the enemy is defeated, miss it and it escapes
  */
 export class DuelSim {
   readonly enemies: EnemyStatus[];
-  readonly outcomes: CueOutcome[];
+  readonly outcomes = new Map<number, CueOutcome>();
   hp: number = PLAYER.maxHp;
   parryCharge = 0;
   defeated = 0;
@@ -65,27 +75,39 @@ export class DuelSim {
   hitsTaken = 0;
   down = false;
   private nextEnter = 0;
+  private readonly landed = new Set<number>();
   private readonly pending: DuelEvent[] = [];
 
   constructor(
     private readonly chart: Chart,
     private readonly noFail: boolean,
+    /** Game time encounter k's enemy walks in (null if not planned yet). */
+    private readonly startTimeOf: (k: number) => number | null = (k) =>
+      chart.encounters[k]?.startTime ?? null,
   ) {
-    this.outcomes = chart.notes.map(() => 'pending');
     this.enemies = chart.encounters.map((e) => {
       const guardMax = e.noteIds.filter((id) => chart.notes[id]!.action !== 'block').length;
       return { index: e.index, state: 'waiting', stateTime: 0, guard: guardMax, guardMax };
     });
   }
 
-  /** Index of the enemy on stage at song time t (the latest one that has walked in). */
+  outcome(cueId: number): CueOutcome {
+    return this.outcomes.get(cueId) ?? 'pending';
+  }
+
+  /** Index of the enemy on stage at game time t (the latest one that has walked in). */
   activeEncounter(t: number): number | null {
     let k: number | null = null;
-    for (const e of this.chart.encounters) if (e.startTime <= t) k = e.index;
+    for (let i = 0; i < this.enemies.length; i++) {
+      const s = this.startTimeOf(i);
+      if (s === null || s > t) break;
+      k = i;
+    }
     return k;
   }
 
-  isLastCue(noteId: number): boolean {
+  /** Whether a chart note is the last one of its encounter. */
+  isLastNote(noteId: number): boolean {
     const n = this.chart.notes[noteId];
     if (!n) return false;
     const ids = this.chart.encounters[n.encounter]!.noteIds;
@@ -95,23 +117,27 @@ export class DuelSim {
   apply(a: DuelAction): void {
     this.enterUpTo(a.time);
     const enemy = this.enemies[a.encounter];
-    if (!enemy || this.outcomes[a.noteId] === 'hit' || this.outcomes[a.noteId] === 'miss') return;
+    const prev = this.outcome(a.noteId);
+    if (!enemy || prev === 'hit' || prev === 'miss') return;
     const base = { noteId: a.noteId, encounter: a.encounter, time: a.time };
 
     if (a.kind === 'holdEnd') {
       if (a.hit) {
-        this.outcomes[a.noteId] = 'hit';
+        this.outcomes.set(a.noteId, 'hit');
         this.pending.push({ type: 'released', ...base, action: a.action });
       } else {
-        this.outcomes[a.noteId] = 'miss';
+        this.outcomes.set(a.noteId, 'miss');
         this.missConsequence(a, enemy);
       }
     } else if (a.hit) {
-      this.outcomes[a.noteId] = a.hold ? 'holding' : 'hit';
+      this.outcomes.set(a.noteId, a.hold ? 'holding' : 'hit');
       if (a.action === 'block') {
         this.pending.push({ type: 'blocked', ...base, judgement: a.judgement, lock: a.hold });
       } else {
-        enemy.guard = Math.max(0, enemy.guard - 1);
+        if (!this.landed.has(a.chartNoteId)) {
+          this.landed.add(a.chartNoteId);
+          enemy.guard = Math.max(0, enemy.guard - 1);
+        }
         this.pending.push({
           type: 'struck',
           ...base,
@@ -125,18 +151,17 @@ export class DuelSim {
       this.parryCharge = Math.min(3, this.parryCharge + a.mods.parryChargePerHit);
       this.hp = Math.min(PLAYER.maxHp, this.hp + PLAYER.heal[a.judgement]);
     } else {
-      this.outcomes[a.noteId] = 'miss';
+      this.outcomes.set(a.noteId, 'miss');
       this.missConsequence(a, enemy);
     }
 
-    if (a.final && enemy.state === 'fighting') {
-      const won = this.outcomes[a.noteId] === 'hit';
-      enemy.state = won ? 'defeated' : 'escaped';
-      enemy.stateTime = a.time;
-      if (won) this.defeated++;
-      else this.escaped++;
-      this.pending.push({ type: won ? 'defeated' : 'escaped', ...base });
-    }
+    if (a.final) this.resolve(enemy, this.outcome(a.noteId) === 'hit', a.noteId, a.time);
+  }
+
+  /** The encounter's final cue was voided (a failed combo with no retries left). */
+  escape(encounter: number, noteId: number, t: number): void {
+    const enemy = this.enemies[encounter];
+    if (enemy) this.resolve(enemy, false, noteId, t);
   }
 
   update(t: number): DuelEvent[] {
@@ -144,20 +169,57 @@ export class DuelSim {
     return this.pending.splice(0, this.pending.length);
   }
 
+  private resolve(enemy: EnemyStatus, won: boolean, noteId: number, t: number): void {
+    if (enemy.state !== 'fighting') return;
+    enemy.state = won ? 'defeated' : 'escaped';
+    enemy.stateTime = t;
+    if (won) this.defeated++;
+    else this.escaped++;
+    this.pending.push({
+      type: won ? 'defeated' : 'escaped',
+      noteId,
+      encounter: enemy.index,
+      time: t,
+    });
+  }
+
   private enterUpTo(t: number): void {
-    while (this.nextEnter < this.chart.encounters.length) {
-      const e = this.chart.encounters[this.nextEnter]!;
-      if (e.startTime > t) break;
+    while (this.nextEnter < this.enemies.length) {
+      const start = this.startTimeOf(this.nextEnter);
+      if (start === null || start > t) break;
       const enemy = this.enemies[this.nextEnter]!;
       enemy.state = 'fighting';
-      enemy.stateTime = e.startTime;
-      this.pending.push({ type: 'enemyEnter', encounter: e.index, time: e.startTime });
+      enemy.stateTime = start;
+      this.pending.push({ type: 'enemyEnter', encounter: enemy.index, time: start });
       this.nextEnter++;
+    }
+  }
+
+  private damage(a: DuelAction, enemy: EnemyStatus, combo: boolean): void {
+    const kind = this.chart.encounters[enemy.index]!.enemy;
+    const damage = PLAYER.missDamage * ENEMIES[kind].damageMultiplier;
+    this.hitsTaken++;
+    this.hp = Math.max(0, this.hp - damage);
+    this.pending.push({
+      type: 'playerHit',
+      noteId: a.noteId,
+      encounter: a.encounter,
+      damage,
+      combo,
+      time: a.time,
+    });
+    if (this.hp <= 0 && !this.down && !this.noFail) {
+      this.down = true;
+      this.pending.push({ type: 'playerDown', time: a.time });
     }
   }
 
   private missConsequence(a: DuelAction, enemy: EnemyStatus): void {
     const base = { noteId: a.noteId, encounter: a.encounter, time: a.time };
+    if (a.combo) {
+      this.damage(a, enemy, true);
+      return;
+    }
     if (a.action !== 'block') {
       this.pending.push({ type: 'recovered', ...base, action: a.action });
       return;
@@ -167,14 +229,6 @@ export class DuelSim {
       this.pending.push({ type: 'parry', ...base });
       return;
     }
-    const kind = this.chart.encounters[enemy.index]!.enemy;
-    const damage = PLAYER.missDamage * ENEMIES[kind].damageMultiplier;
-    this.hitsTaken++;
-    this.hp = Math.max(0, this.hp - damage);
-    this.pending.push({ type: 'playerHit', ...base, damage });
-    if (this.hp <= 0 && !this.down && !this.noFail) {
-      this.down = true;
-      this.pending.push({ type: 'playerDown', time: a.time });
-    }
+    this.damage(a, enemy, false);
   }
 }

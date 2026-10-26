@@ -1,4 +1,27 @@
-import { composeDemo, DEMO_BPM, DEMO_LENGTH_BEATS, type CompEvent } from './composition';
+import type { SynthPatch } from '../../synth/patch';
+import { DEFAULT_PATCH } from '../../synth/patch';
+import { playLeadNote } from '../leadVoice';
+import {
+  composeDemo,
+  DEMO_BPM,
+  DEMO_LENGTH_BEATS,
+  PARTS,
+  type CompEvent,
+  type Part,
+  type Vowel,
+} from './composition';
+
+export type Stems = Record<Part, AudioBuffer>;
+
+/** The song's own lead sound (the stem). The player's patch can voice it live instead. */
+export const SONG_LEAD_PATCH: SynthPatch = {
+  ...DEFAULT_PATCH,
+  wtPosition: 0.62,
+  unison: 5,
+  detune: 0.45,
+  cutoff: 0.72,
+  resonance: 0.25,
+};
 
 const mtof = (m: number) => 440 * Math.pow(2, (m - 69) / 12);
 
@@ -28,103 +51,49 @@ function noiseBuffer(ctx: BaseAudioContext, seconds: number): AudioBuffer {
   return buf;
 }
 
-/**
- * Render the demo song offline. Returns an AudioBuffer so the demo plays through the
- * exact same path (and clock) as a user's audio file.
- */
-export type DemoBus = 'kick' | 'perc' | 'bass' | 'synth';
+/** Sample-and-hold decimation plus bit reduction, mixed in: digicore crunch. */
+function bitcrush(buf: AudioBuffer, hold: number, bits: number, mix: number): void {
+  const q = Math.pow(2, bits - 1);
+  for (let ch = 0; ch < buf.numberOfChannels; ch++) {
+    const d = buf.getChannelData(ch);
+    let held = 0;
+    for (let i = 0; i < d.length; i++) {
+      if (i % hold === 0) held = Math.round(d[i]! * q) / q;
+      d[i] = d[i]! * (1 - mix) + held * mix;
+    }
+  }
+}
 
-/** `solo` renders a single bus (for mixing checks). */
-export async function renderDemoSong(sampleRate = 44100, solo?: DemoBus): Promise<AudioBuffer> {
+/**
+ * Render the demo song offline as one stem per part. Each unique voice (instrument +
+ * pitch + length) is rendered once in its own small context and summed in JS; only the
+ * per-stem bus effects run in a full-length context.
+ */
+export async function renderDemoStems(
+  sampleRate = 44100,
+  leadPatch = SONG_LEAD_PATCH,
+): Promise<Stems> {
   const spb = 60 / DEMO_BPM;
   const duration = DEMO_LENGTH_BEATS * spb + 2;
-  const ctx = new OfflineAudioContext(2, Math.ceil(duration * sampleRate), sampleRate);
+  const frames = Math.ceil(duration * sampleRate);
   const T = (beat: number) => beat * spb;
-
-  // ---- buses
-  const master = ctx.createDynamicsCompressor();
-  master.threshold.value = -14;
-  master.ratio.value = 6;
-  master.attack.value = 0.003;
-  master.release.value = 0.12;
-  const clip = makeShaper(ctx, 1.4);
-  const out = ctx.createGain();
-  out.gain.value = 0.8;
-  master.connect(clip).connect(out).connect(ctx.destination);
-
-  // bus = input gain → saturation → output gain (levels set by solo RMS checks)
-  const makeBus = (inGain: number, drive: number, outGain: number, dest: AudioNode) => {
-    const input = ctx.createGain();
-    input.gain.value = inGain;
-    const output = ctx.createGain();
-    output.gain.value = outGain;
-    input.connect(makeShaper(ctx, drive)).connect(output).connect(dest);
-    return input;
-  };
-  const kickBus = makeBus(0.9, 3, 0.62, master);
-  const percBus = ctx.createGain();
-  percBus.gain.value = 1.4;
-  percBus.connect(master);
-  const bassBus = makeBus(0.16, 2, 0.75, master);
-  // melodic bus gets sidechain ducking on every kick
-  const duck = ctx.createGain();
-  duck.connect(master);
-  const synthBus = ctx.createGain();
-  synthBus.gain.value = 0.55;
-  synthBus.connect(makeShaper(ctx, 1.2, 48)).connect(duck);
-
-  // simple stereo delay for the synths
-  const delay = ctx.createDelay(1);
-  delay.delayTime.value = spb * 0.75;
-  const fb = ctx.createGain();
-  fb.gain.value = 0.28;
-  const delayOut = ctx.createGain();
-  delayOut.gain.value = 0.22;
-  synthBus.connect(delay);
-  delay.connect(fb).connect(delay);
-  delay.connect(delayOut).connect(duck);
-
   const events = composeDemo();
-  for (const e of events) if (e.inst === 'kick') sidechain(duck.gain, T(e.beat));
 
-  // Each unique voice (instrument + pitch + length) is rendered once in its own small
-  // offline context, then summed into per-bus buffers in plain JS. Only the bus effects
-  // run in the big context. (One oscillator graph per note took over a minute to render.)
-  type Bus = DemoBus;
-  const busOf: Record<CompEvent['inst'], Bus> = {
-    kick: 'kick',
-    clap: 'perc',
-    rim: 'perc',
-    impact: 'perc',
-    hat: 'perc',
-    riser: 'perc',
-    bass: 'bass',
-    lead: 'synth',
-    arp: 'synth',
-    stab: 'synth',
-    pad: 'synth',
-  };
-  const busNode: Record<Bus, AudioNode> = {
-    kick: kickBus,
-    perc: percBus,
-    bass: bassBus,
-    synth: synthBus,
-  };
   const voices = new Map<string, Promise<AudioBuffer>>();
   const keyed = events.map((e) => {
     const key = voiceKey(e);
-    if (!voices.has(key)) voices.set(key, renderVoice(e, spb, sampleRate));
+    if (!voices.has(key)) voices.set(key, renderVoice(e, spb, sampleRate, leadPatch));
     return { e, key };
   });
   const buffers = new Map<string, AudioBuffer>();
   await Promise.all([...voices].map(async ([k, p]) => buffers.set(k, await p)));
 
-  const frames = ctx.length;
-  const mixes = {} as Record<Bus, AudioBuffer>;
-  for (const b of Object.keys(busNode) as Bus[]) mixes[b] = ctx.createBuffer(2, frames, sampleRate);
+  const dry = {} as Record<Part, AudioBuffer>;
+  const scratch = new OfflineAudioContext(2, 1, sampleRate);
+  for (const p of PARTS) dry[p] = scratch.createBuffer(2, frames, sampleRate);
   for (const { e, key } of keyed) {
     const v = buffers.get(key)!;
-    const mix = mixes[busOf[e.inst]];
+    const mix = dry[e.part];
     const at = Math.round(T(e.beat) * sampleRate);
     for (let ch = 0; ch < 2; ch++) {
       const src = v.getChannelData(Math.min(ch, v.numberOfChannels - 1));
@@ -133,69 +102,159 @@ export async function renderDemoSong(sampleRate = 44100, solo?: DemoBus): Promis
       for (let i = 0; i < n; i++) dst[at + i]! += src[i]! * e.vel;
     }
   }
-  for (const b of Object.keys(busNode) as Bus[]) {
-    if (solo && solo !== b) continue;
-    const src = ctx.createBufferSource();
-    src.buffer = mixes[b];
-    src.connect(busNode[b]);
-    src.start(0);
+  bitcrush(dry.vox, 3, 7, 0.65);
+  bitcrush(dry.perc, 2, 8, 0.35);
+
+  const kicks = events.filter((e) => e.inst === 'k808').map((e) => T(e.beat));
+  const busFx: Record<Part, (ctx: OfflineAudioContext, input: AudioNode, out: AudioNode) => void> =
+    {
+      k808: (ctx, input, out) => {
+        const g = ctx.createGain();
+        g.gain.value = 0.22;
+        input.connect(makeShaper(ctx, 3.5)).connect(g).connect(out);
+      },
+      perc: (ctx, input, out) => {
+        const g = ctx.createGain();
+        g.gain.value = 0.75;
+        input.connect(makeShaper(ctx, 1.6)).connect(g).connect(out);
+      },
+      vox: (ctx, input, out) => {
+        const g = ctx.createGain();
+        g.gain.value = 0.95;
+        input.connect(g).connect(out);
+        const d = ctx.createDelay(1);
+        d.delayTime.value = spb * 0.75;
+        const fb = ctx.createGain();
+        fb.gain.value = 0.3;
+        const wet = ctx.createGain();
+        wet.gain.value = 0.25;
+        g.connect(d).connect(fb).connect(d);
+        d.connect(wet).connect(out);
+      },
+      lead: (ctx, input, out) => leadBus(ctx, input, out, spb),
+      backing: (ctx, input, out) => {
+        const duck = ctx.createGain();
+        for (const k of kicks) sidechain(duck.gain, k);
+        const g = ctx.createGain();
+        g.gain.value = 0.6;
+        input
+          .connect(makeShaper(ctx, 1.2, 64))
+          .connect(duck)
+          .connect(g)
+          .connect(out);
+      },
+    };
+
+  const stems = {} as Stems;
+  await Promise.all(
+    PARTS.map(async (p) => {
+      const ctx = new OfflineAudioContext(2, frames, sampleRate);
+      const src = ctx.createBufferSource();
+      src.buffer = dry[p];
+      busFx[p](ctx, src, ctx.destination);
+      src.start(0);
+      stems[p] = await ctx.startRendering();
+    }),
+  );
+  return stems;
+}
+
+/** The lead bus: light drive and a dotted-eighth stereo delay. Shared with the live lead. */
+export function leadBus(
+  ctx: BaseAudioContext,
+  input: AudioNode,
+  out: AudioNode,
+  spb: number,
+): void {
+  const g = ctx.createGain();
+  g.gain.value = 1.15;
+  input.connect(makeShaper(ctx, 1.3)).connect(g).connect(out);
+  const d = ctx.createDelay(1);
+  d.delayTime.value = spb * 0.75;
+  const fb = ctx.createGain();
+  fb.gain.value = 0.28;
+  const wet = ctx.createGain();
+  wet.gain.value = 0.2;
+  g.connect(d).connect(fb).connect(d);
+  d.connect(wet).connect(out);
+}
+
+/** Every stem summed into one buffer (editor preview, tests, custom-mix fallback). */
+export async function renderDemoSong(sampleRate = 44100): Promise<AudioBuffer> {
+  const stems = await renderDemoStems(sampleRate);
+  return mixStems(stems);
+}
+
+export function mixStems(stems: Partial<Stems>): AudioBuffer {
+  const list = Object.values(stems).filter((b): b is AudioBuffer => !!b);
+  const first = list[0]!;
+  const out = new OfflineAudioContext(2, 1, first.sampleRate).createBuffer(
+    2,
+    first.length,
+    first.sampleRate,
+  );
+  for (const b of list) {
+    for (let ch = 0; ch < 2; ch++) {
+      const src = b.getChannelData(Math.min(ch, b.numberOfChannels - 1));
+      const dst = out.getChannelData(ch);
+      for (let i = 0; i < dst.length; i++) dst[i]! += src[i]! * 0.8;
+    }
   }
-  return ctx.startRendering();
+  return out;
 }
 
 function voiceKey(e: CompEvent): string {
-  switch (e.inst) {
-    case 'kick':
-    case 'clap':
-    case 'rim':
-    case 'impact':
-    case 'hat':
-      return e.inst;
-    default:
-      return `${e.inst}:${e.midi.join(',')}:${e.len}:${e.glideFrom ?? ''}`;
-  }
+  return `${e.inst}:${e.midi.join(',')}:${e.len}:${e.glideFrom ?? ''}:${e.vowel ?? ''}`;
 }
 
-async function renderVoice(e: CompEvent, spb: number, sampleRate: number): Promise<AudioBuffer> {
+async function renderVoice(
+  e: CompEvent,
+  spb: number,
+  sampleRate: number,
+  leadPatch: SynthPatch,
+): Promise<AudioBuffer> {
   const len = e.len * spb;
-  const tail = e.inst === 'pad' || e.inst === 'impact' ? 1 : 0.4;
+  const tail = e.inst === 'pad' || e.inst === 'impact' ? 1.2 : 0.4;
   const ctx = new OfflineAudioContext(2, Math.ceil((len + tail) * sampleRate), sampleRate);
   const out = ctx.destination;
   const noise = noiseBuffer(ctx, 2);
-  const unit = { ...e, vel: 1 };
+  const m = e.midi[0] ?? 60;
   switch (e.inst) {
-    case 'kick':
-      kick(ctx, out, noise, 0, 1);
-      break;
-    case 'clap':
-      clap(ctx, out, noise, 0, 1);
+    case 'k808':
+      k808(ctx, out, noise, len, m, e.glideFrom);
       break;
     case 'hat':
-      hat(ctx, out, noise, 0, 1);
+      hat(ctx, out, noise, 0.035, 7200 + m * 900);
       break;
-    case 'rim':
-      rim(ctx, out, noise, 0, 1);
+    case 'openHat':
+      hat(ctx, out, noise, 0.2, 7000);
       break;
-    case 'impact':
-      impact(ctx, out, noise, 0, len, 1);
+    case 'snare':
+      snare(ctx, out, noise);
       break;
-    case 'bass':
-      bass(ctx, out, 0, len, unit);
+    case 'blip':
+      blip(ctx, out, m);
+      break;
+    case 'chop':
+      chop(ctx, out, noise, len, m, e.vowel ?? 'a');
       break;
     case 'lead':
-      lead(ctx, out, 0, len, unit);
-      break;
-    case 'arp':
-      arp(ctx, out, 0, len, unit);
-      break;
-    case 'stab':
-      supersaw(ctx, out, 0, len, e.midi, 1, 0.004, 0.12);
+      playLeadNote(ctx, out, 0, m, len, 1, leadPatch);
       break;
     case 'pad':
-      supersaw(ctx, out, 0, len, e.midi, 0.6, 0.6, 0.8);
+      supersaw(ctx, out, len, e.midi, 0.55, 0.35, 0.9);
+      break;
+    case 'bell':
+      bell(ctx, out, m, len);
       break;
     case 'riser':
-      riser(ctx, out, noise, 0, len, 1);
+      riser(ctx, out, noise, len);
+      break;
+    case 'impact':
+      impact(ctx, out, noise, len);
+      break;
+    case 'glitch':
+      glitch(ctx, out, m);
       break;
   }
   return ctx.startRendering();
@@ -203,8 +262,8 @@ async function renderVoice(e: CompEvent, spb: number, sampleRate: number): Promi
 
 function sidechain(g: AudioParam, t: number) {
   g.setValueAtTime(1, Math.max(0, t - 0.002));
-  g.linearRampToValueAtTime(0.3, t + 0.01);
-  g.linearRampToValueAtTime(1, t + 0.22);
+  g.linearRampToValueAtTime(0.25, t + 0.01);
+  g.linearRampToValueAtTime(1, t + 0.24);
 }
 
 function env(
@@ -223,151 +282,173 @@ function env(
   return g;
 }
 
-function kick(ctx: BaseAudioContext, bus: AudioNode, noise: AudioBuffer, t: number, vel: number) {
+/** Distorted 808: punchy pitch drop (or a glide from the previous note) plus a kick click. */
+function k808(
+  ctx: BaseAudioContext,
+  out: AudioNode,
+  noise: AudioBuffer,
+  len: number,
+  midi: number,
+  glideFrom?: number,
+) {
+  const f = mtof(midi);
   const o = ctx.createOscillator();
   o.type = 'sine';
-  o.frequency.setValueAtTime(180, t);
-  o.frequency.exponentialRampToValueAtTime(48, t + 0.09);
-  const g = env(ctx, t, vel, 0.002, 0.05, 0.3);
-  o.connect(g).connect(bus);
-  o.start(t);
-  o.stop(t + 0.4);
-  const n = ctx.createBufferSource();
-  n.buffer = noise;
-  const hp = ctx.createBiquadFilter();
-  hp.type = 'highpass';
-  hp.frequency.value = 3000;
-  const ng = env(ctx, t, 0.3 * vel, 0.001, 0.003, 0.02);
-  n.connect(hp).connect(ng).connect(bus);
-  n.start(t, 0.3, 0.05);
-}
-
-function clap(ctx: BaseAudioContext, bus: AudioNode, noise: AudioBuffer, t: number, vel: number) {
-  const n = ctx.createBufferSource();
-  n.buffer = noise;
-  const bp = ctx.createBiquadFilter();
-  bp.type = 'bandpass';
-  bp.frequency.value = 1600;
-  bp.Q.value = 0.9;
+  if (glideFrom !== undefined) {
+    o.frequency.setValueAtTime(mtof(glideFrom), 0);
+    o.frequency.exponentialRampToValueAtTime(f, 0.09);
+  } else {
+    o.frequency.setValueAtTime(f * 2.4, 0);
+    o.frequency.exponentialRampToValueAtTime(f, 0.04);
+  }
   const g = ctx.createGain();
-  g.gain.setValueAtTime(0, t);
-  for (let i = 0; i < 3; i++) {
-    g.gain.linearRampToValueAtTime(vel, t + i * 0.011 + 0.001);
-    g.gain.linearRampToValueAtTime(vel * 0.3, t + i * 0.011 + 0.009);
-  }
-  g.gain.linearRampToValueAtTime(vel * 0.8, t + 0.035);
-  g.gain.exponentialRampToValueAtTime(0.0001, t + 0.2);
-  n.connect(bp).connect(g).connect(bus);
-  n.start(t, 0.4, 0.25);
-  const body = ctx.createOscillator();
-  body.type = 'triangle';
-  body.frequency.setValueAtTime(240, t);
-  body.frequency.exponentialRampToValueAtTime(160, t + 0.08);
-  const bg = env(ctx, t, 0.45 * vel, 0.001, 0.01, 0.09);
-  body.connect(bg).connect(bus);
-  body.start(t);
-  body.stop(t + 0.15);
-}
-
-function hat(ctx: BaseAudioContext, bus: AudioNode, noise: AudioBuffer, t: number, vel: number) {
+  g.gain.setValueAtTime(0, 0);
+  g.gain.linearRampToValueAtTime(1, 0.003);
+  g.gain.exponentialRampToValueAtTime(0.32, Math.max(0.05, Math.min(len, 1.2)));
+  g.gain.setValueAtTime(0.32, Math.max(0.06, len));
+  g.gain.exponentialRampToValueAtTime(0.0001, len + 0.1);
+  o.connect(g).connect(makeShaper(ctx, 7)).connect(out);
+  o.start(0);
+  o.stop(len + 0.15);
+  const k = ctx.createOscillator();
+  k.frequency.setValueAtTime(170, 0);
+  k.frequency.exponentialRampToValueAtTime(48, 0.06);
+  k.connect(env(ctx, 0, 0.9, 0.001, 0.02, 0.1)).connect(out);
+  k.start(0);
+  k.stop(0.2);
   const n = ctx.createBufferSource();
   n.buffer = noise;
   const hp = ctx.createBiquadFilter();
   hp.type = 'highpass';
-  hp.frequency.value = 8500;
-  const g = env(ctx, t, 0.45 * vel, 0.001, 0.005, 0.035);
-  n.connect(hp).connect(g).connect(bus);
-  n.start(t, 0.9, 0.06);
+  hp.frequency.value = 3500;
+  n.connect(hp)
+    .connect(env(ctx, 0, 0.35, 0.0005, 0.002, 0.015))
+    .connect(out);
+  n.start(0, 0.3, 0.03);
 }
 
-/** Metallic rim tick: the STAB sound. */
-function rim(ctx: BaseAudioContext, bus: AudioNode, noise: AudioBuffer, t: number, vel: number) {
-  for (const [f, a] of [
-    [1870, 0.5],
-    [2790, 0.3],
-    [4120, 0.18],
-  ] as const) {
-    const o = ctx.createOscillator();
-    o.type = 'triangle';
-    o.frequency.setValueAtTime(f, t);
-    const g = env(ctx, t, a * vel, 0.001, 0.004, 0.07);
-    o.connect(g).connect(bus);
-    o.start(t);
-    o.stop(t + 0.1);
-  }
-  const n = ctx.createBufferSource();
-  n.buffer = noise;
-  const bp = ctx.createBiquadFilter();
-  bp.type = 'bandpass';
-  bp.frequency.value = 5200;
-  bp.Q.value = 2;
-  const ng = env(ctx, t, 0.6 * vel, 0.001, 0.002, 0.018);
-  n.connect(bp).connect(ng).connect(bus);
-  n.start(t, 0.7, 0.03);
-}
-
-/** Crash + sub boom: the FLOURISH sound. */
-function impact(
+function hat(
   ctx: BaseAudioContext,
-  bus: AudioNode,
+  out: AudioNode,
   noise: AudioBuffer,
-  t: number,
-  len: number,
-  vel: number,
+  decay: number,
+  hpHz: number,
 ) {
   const n = ctx.createBufferSource();
   n.buffer = noise;
-  n.loop = true;
   const hp = ctx.createBiquadFilter();
   hp.type = 'highpass';
-  hp.frequency.value = 4500;
-  const g = env(ctx, t, 0.5 * vel, 0.002, 0.02, Math.min(1.6, len));
-  n.connect(hp).connect(g).connect(bus);
-  n.start(t);
-  n.stop(t + len + 0.5);
-  const o = ctx.createOscillator();
-  o.type = 'sine';
-  o.frequency.setValueAtTime(110, t);
-  o.frequency.exponentialRampToValueAtTime(38, t + 0.5);
-  const og = env(ctx, t, 0.9 * vel, 0.003, 0.08, 0.7);
-  o.connect(og).connect(bus);
-  o.start(t);
-  o.stop(t + 1);
+  hp.frequency.value = Math.min(16000, hpHz);
+  const bp = ctx.createBiquadFilter();
+  bp.type = 'peaking';
+  bp.frequency.value = 10000;
+  bp.gain.value = 6;
+  n.connect(hp)
+    .connect(bp)
+    .connect(env(ctx, 0, 0.5, 0.0008, 0.004, decay))
+    .connect(out);
+  n.start(0, 0.9, decay + 0.05);
 }
 
-function bass(ctx: BaseAudioContext, bus: AudioNode, t: number, len: number, e: CompEvent) {
-  const f = mtof(e.midi[0]!);
-  const o = ctx.createOscillator();
-  o.type = 'sine';
-  const o2 = ctx.createOscillator();
-  o2.type = 'square';
-  for (const osc of [o, o2]) {
-    if (e.glideFrom !== undefined) {
-      osc.frequency.setValueAtTime(mtof(e.glideFrom), t);
-      osc.frequency.exponentialRampToValueAtTime(f, t + 0.07);
-    } else {
-      osc.frequency.setValueAtTime(f, t);
-    }
+function snare(ctx: BaseAudioContext, out: AudioNode, noise: AudioBuffer) {
+  const n = ctx.createBufferSource();
+  n.buffer = noise;
+  const bp = ctx.createBiquadFilter();
+  bp.type = 'bandpass';
+  bp.frequency.value = 1900;
+  bp.Q.value = 0.7;
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0, 0);
+  for (let i = 0; i < 3; i++) {
+    g.gain.linearRampToValueAtTime(0.9, i * 0.009 + 0.001);
+    g.gain.linearRampToValueAtTime(0.3, i * 0.009 + 0.007);
   }
-  const lp = ctx.createBiquadFilter();
-  lp.type = 'lowpass';
-  lp.frequency.value = 420;
-  const sq = ctx.createGain();
-  sq.gain.value = 0.18;
-  const g = env(ctx, t, e.vel, 0.004, Math.max(0.01, len - 0.06), 0.06);
-  o.connect(g);
-  o2.connect(sq).connect(lp).connect(g);
-  g.connect(bus);
-  o.start(t);
-  o2.start(t);
-  o.stop(t + len + 0.1);
-  o2.stop(t + len + 0.1);
+  g.gain.linearRampToValueAtTime(0.8, 0.03);
+  g.gain.exponentialRampToValueAtTime(0.0001, 0.2);
+  const sh = makeShaper(ctx, 2.5);
+  n.connect(bp).connect(g).connect(sh).connect(out);
+  n.start(0, 0.4, 0.25);
+  const body = ctx.createOscillator();
+  body.type = 'triangle';
+  body.frequency.setValueAtTime(230, 0);
+  body.frequency.exponentialRampToValueAtTime(170, 0.07);
+  body.connect(env(ctx, 0, 0.55, 0.001, 0.01, 0.08)).connect(sh);
+  body.start(0);
+  body.stop(0.15);
+}
+
+function blip(ctx: BaseAudioContext, out: AudioNode, midi: number) {
+  const o = ctx.createOscillator();
+  o.type = 'square';
+  o.frequency.setValueAtTime(mtof(midi), 0);
+  o.frequency.setValueAtTime(mtof(midi + 7), 0.015);
+  o.connect(env(ctx, 0, 0.18, 0.001, 0.02, 0.02))
+    .connect(makeShaper(ctx, 1, 6))
+    .connect(out);
+  o.start(0);
+  o.stop(0.08);
+}
+
+/** Formant frequencies per vowel (Hz), raised for a pitched-up synthetic voice. */
+const FORMANTS: Record<Vowel, [number, number, number]> = {
+  a: [850, 1220, 2810],
+  e: [420, 2000, 2600],
+  i: [310, 2700, 3300],
+  o: [460, 840, 2830],
+  u: [330, 720, 2530],
+};
+const FORMANT_SHIFT = 1.35;
+
+/** A vocal chop by formant synthesis: a buzzy glottal source through three resonances. */
+function chop(
+  ctx: BaseAudioContext,
+  out: AudioNode,
+  noise: AudioBuffer,
+  len: number,
+  midi: number,
+  vowel: Vowel,
+) {
+  const f0 = mtof(midi);
+  const src = ctx.createOscillator();
+  src.type = 'sawtooth';
+  src.frequency.setValueAtTime(f0 * Math.pow(2, -2 / 12), 0);
+  src.frequency.exponentialRampToValueAtTime(f0, 0.04);
+  const vib = ctx.createOscillator();
+  vib.frequency.value = 5.8;
+  const vibAmt = ctx.createGain();
+  vibAmt.gain.value = len > 0.2 ? 22 : 0;
+  vib.connect(vibAmt).connect(src.detune);
+  const g = env(ctx, 0, 0.9, 0.008, Math.max(0.01, len * 0.75), 0.05);
+  const sum = ctx.createGain();
+  FORMANTS[vowel].forEach((fHz, i) => {
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.value = fHz * FORMANT_SHIFT;
+    bp.Q.value = [7, 11, 13][i]!;
+    const lvl = ctx.createGain();
+    lvl.gain.value = [1.6, 1.0, 0.55][i]!;
+    src.connect(bp).connect(lvl).connect(sum);
+  });
+  sum.connect(g).connect(makeShaper(ctx, 1.8)).connect(out);
+  src.start(0);
+  vib.start(0);
+  src.stop(len + 0.1);
+  vib.stop(len + 0.1);
+  // breathy consonant onset
+  const n = ctx.createBufferSource();
+  n.buffer = noise;
+  const hp = ctx.createBiquadFilter();
+  hp.type = 'bandpass';
+  hp.frequency.value = 4500;
+  n.connect(hp)
+    .connect(env(ctx, 0, 0.25, 0.002, 0.01, 0.02))
+    .connect(out);
+  n.start(0, 1.1, 0.05);
 }
 
 function supersaw(
   ctx: BaseAudioContext,
-  bus: AudioNode,
-  t: number,
+  out: AudioNode,
   len: number,
   midis: number[],
   vel: number,
@@ -376,13 +457,12 @@ function supersaw(
 ) {
   const lp = ctx.createBiquadFilter();
   lp.type = 'lowpass';
-  lp.Q.value = 2;
-  lp.frequency.setValueAtTime(1400, t);
-  lp.frequency.exponentialRampToValueAtTime(7000, t + Math.max(0.03, attack));
-  lp.frequency.exponentialRampToValueAtTime(2500, t + len);
-  const g = env(ctx, t, vel / midis.length, attack, Math.max(0.01, len - attack), release);
-  lp.connect(g).connect(bus);
-  const detunes = [-18, -7, 0, 7, 18];
+  lp.Q.value = 1.5;
+  lp.frequency.setValueAtTime(1200, 0);
+  lp.frequency.linearRampToValueAtTime(3200, len);
+  const g = env(ctx, 0, vel / midis.length, attack, Math.max(0.01, len - attack), release);
+  lp.connect(g).connect(out);
+  const detunes = [-22, -9, 0, 9, 22];
   midis.forEach((m, mi) => {
     detunes.forEach((d, di) => {
       const o = ctx.createOscillator();
@@ -392,83 +472,73 @@ function supersaw(
       const p = ctx.createStereoPanner();
       p.pan.value = (di / (detunes.length - 1)) * 1.4 - 0.7;
       o.connect(p).connect(lp);
-      o.start(t);
-      o.stop(t + len + release + 0.05);
+      o.start(0);
+      o.stop(len + release + 0.05);
     });
   });
 }
 
-function lead(ctx: BaseAudioContext, bus: AudioNode, t: number, len: number, e: CompEvent) {
-  const f = mtof(e.midi[0]!);
-  const lp = ctx.createBiquadFilter();
-  lp.type = 'lowpass';
-  lp.frequency.setValueAtTime(9000, t);
-  lp.frequency.exponentialRampToValueAtTime(3500, t + 0.25);
-  const g = env(ctx, t, e.vel * 0.55, 0.004, Math.max(0.01, len * 0.8), 0.08);
-  lp.connect(g).connect(bus);
-  const vib = ctx.createOscillator();
-  vib.frequency.value = 6;
-  const vibAmt = ctx.createGain();
-  vibAmt.gain.setValueAtTime(0, t);
-  vibAmt.gain.linearRampToValueAtTime(len > 0.6 ? 18 : 0, t + 0.3);
-  vib.connect(vibAmt);
-  vib.start(t);
-  vib.stop(t + len + 0.2);
-  for (const [type, d] of [
-    ['sawtooth', -9],
-    ['sawtooth', 9],
-    ['square', 1200],
+/** Glassy pluck: a sine and a bright partial, decaying fast. */
+function bell(ctx: BaseAudioContext, out: AudioNode, midi: number, len: number) {
+  for (const [ratio, a, dec] of [
+    [1, 0.3, 0.35],
+    [4.01, 0.12, 0.12],
+    [2, 0.08, 0.2],
   ] as const) {
     const o = ctx.createOscillator();
-    o.type = type;
-    o.frequency.setValueAtTime(f * Math.pow(2, -1 / 12), t);
-    o.frequency.exponentialRampToValueAtTime(f, t + 0.03);
-    o.detune.value = d;
-    vibAmt.connect(o.detune);
-    const og = ctx.createGain();
-    og.gain.value = type === 'square' ? 0.25 : 0.5;
-    o.connect(og).connect(lp);
-    o.start(t);
-    o.stop(t + len + 0.2);
+    o.frequency.value = mtof(midi) * ratio;
+    o.connect(env(ctx, 0, a, 0.002, 0.005, Math.min(len + 0.2, dec))).connect(out);
+    o.start(0);
+    o.stop(len + 0.3);
   }
 }
 
-function arp(ctx: BaseAudioContext, bus: AudioNode, t: number, len: number, e: CompEvent) {
-  const o = ctx.createOscillator();
-  o.type = 'square';
-  o.frequency.value = mtof(e.midi[0]!);
-  const lp = ctx.createBiquadFilter();
-  lp.type = 'lowpass';
-  lp.Q.value = 6;
-  lp.frequency.setValueAtTime(5000, t);
-  lp.frequency.exponentialRampToValueAtTime(700, t + 0.12);
-  const g = env(ctx, t, e.vel * 0.35, 0.002, 0.01, Math.max(0.05, len));
-  o.connect(lp).connect(g).connect(bus);
-  o.start(t);
-  o.stop(t + len + 0.1);
-}
-
-function riser(
-  ctx: BaseAudioContext,
-  bus: AudioNode,
-  noise: AudioBuffer,
-  t: number,
-  len: number,
-  vel: number,
-) {
+function riser(ctx: BaseAudioContext, out: AudioNode, noise: AudioBuffer, len: number) {
   const n = ctx.createBufferSource();
   n.buffer = noise;
   n.loop = true;
   const bp = ctx.createBiquadFilter();
   bp.type = 'bandpass';
   bp.Q.value = 3;
-  bp.frequency.setValueAtTime(300, t);
-  bp.frequency.exponentialRampToValueAtTime(9000, t + len);
+  bp.frequency.setValueAtTime(300, 0);
+  bp.frequency.exponentialRampToValueAtTime(9000, len);
   const g = ctx.createGain();
-  g.gain.setValueAtTime(0.0001, t);
-  g.gain.exponentialRampToValueAtTime(vel * 0.6, t + len);
-  g.gain.linearRampToValueAtTime(0, t + len + 0.02);
-  n.connect(bp).connect(g).connect(bus);
-  n.start(t);
-  n.stop(t + len + 0.05);
+  g.gain.setValueAtTime(0.0001, 0);
+  g.gain.exponentialRampToValueAtTime(0.5, len);
+  g.gain.linearRampToValueAtTime(0, len + 0.02);
+  n.connect(bp).connect(g).connect(out);
+  n.start(0);
+  n.stop(len + 0.05);
+}
+
+function impact(ctx: BaseAudioContext, out: AudioNode, noise: AudioBuffer, len: number) {
+  const n = ctx.createBufferSource();
+  n.buffer = noise;
+  n.loop = true;
+  const hp = ctx.createBiquadFilter();
+  hp.type = 'highpass';
+  hp.frequency.value = 4500;
+  n.connect(hp)
+    .connect(env(ctx, 0, 0.45, 0.002, 0.02, Math.min(1.6, len)))
+    .connect(out);
+  n.start(0);
+  n.stop(len + 0.5);
+  const o = ctx.createOscillator();
+  o.frequency.setValueAtTime(110, 0);
+  o.frequency.exponentialRampToValueAtTime(38, 0.5);
+  o.connect(env(ctx, 0, 0.8, 0.003, 0.08, 0.7)).connect(out);
+  o.start(0);
+  o.stop(1);
+}
+
+function glitch(ctx: BaseAudioContext, out: AudioNode, midi: number) {
+  const o = ctx.createOscillator();
+  o.type = 'square';
+  o.frequency.setValueAtTime(mtof(midi), 0);
+  o.frequency.setValueAtTime(mtof(midi - 12), 0.03);
+  o.connect(env(ctx, 0, 0.15, 0.001, 0.04, 0.02))
+    .connect(makeShaper(ctx, 1, 4))
+    .connect(out);
+  o.start(0);
+  o.stop(0.1);
 }

@@ -1,21 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { ACTIONS, type Note } from '../src/chart/types';
+import type { JudgeNote } from '../src/rhythm/judge';
 import { JUDGEMENT_WINDOWS as W } from '../src/config/gameplay';
 import { Judge } from '../src/rhythm/judge';
 
-const tap = (id: number, lane: number, time: number): Note => ({
+const tap = (id: number, lane: number, time: number): JudgeNote => ({
   id,
   lane,
-  action: ACTIONS[lane % 4]!,
-  encounter: 0,
-  beat: time,
   time,
-  endBeat: null,
   endTime: null,
 });
-const hold = (id: number, lane: number, time: number, end: number): Note => ({
+const hold = (id: number, lane: number, time: number, end: number): JudgeNote => ({
   ...tap(id, lane, time),
-  endBeat: end,
   endTime: end,
 });
 

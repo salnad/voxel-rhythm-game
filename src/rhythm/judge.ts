@@ -1,8 +1,15 @@
-import type { Note } from '../chart/types';
 import type { JudgementWindows } from '../config/gameplay';
 
 export type Judgement = 'perfect' | 'great' | 'good' | 'miss';
 export type JudgementKind = 'tap' | 'holdStart' | 'holdEnd';
+
+/** What the judge needs to know about a cue. Ids must be unique, small non-negative integers. */
+export interface JudgeNote {
+  id: number;
+  lane: number;
+  time: number;
+  endTime: number | null;
+}
 
 export interface JudgementEvent {
   noteId: number;
@@ -15,30 +22,49 @@ export interface JudgementEvent {
   time: number;
 }
 
-type NoteState = 'pending' | 'holding' | 'done';
+type NoteState = 'pending' | 'holding' | 'done' | 'void';
 
 /**
  * Pure note judge. Feed it lane presses/releases (in song time) and call update()
  * every frame; it returns judgement events. No clocks, no DOM.
+ *
+ * Notes can be added while playing (the adaptive timeline instantiates one measure at a
+ * time) and voided (a failed combo's remaining cues, or a re-planned measure).
  */
 export class Judge {
-  private readonly state: NoteState[];
-  private readonly byLane: Note[][];
+  private readonly state: NoteState[] = [];
+  private readonly byLane: JudgeNote[][];
   /** Index into byLane[lane] of the earliest note that may still be pending. */
   private readonly cursor: number[];
-  private readonly holding: (Note | null)[];
+  private readonly holding: (JudgeNote | null)[];
+  private pendingCount = 0;
 
   constructor(
-    notes: readonly Note[],
+    notes: readonly JudgeNote[],
     laneCount: number,
     private readonly windows: JudgementWindows,
   ) {
-    this.state = notes.map(() => 'pending');
     this.byLane = Array.from({ length: laneCount }, () => []);
-    for (const n of notes) this.byLane[n.lane]?.push(n);
-    for (const lane of this.byLane) lane.sort((a, b) => a.time - b.time);
     this.cursor = new Array<number>(laneCount).fill(0);
-    this.holding = new Array<Note | null>(laneCount).fill(null);
+    this.holding = new Array<JudgeNote | null>(laneCount).fill(null);
+    for (const n of notes) this.add(n);
+  }
+
+  add(n: JudgeNote): void {
+    const list = this.byLane[n.lane];
+    if (!list) return;
+    this.state[n.id] = 'pending';
+    this.pendingCount++;
+    let i = list.length;
+    while (i > this.cursor[n.lane]! && list[i - 1]!.time > n.time) i--;
+    list.splice(i, 0, n);
+  }
+
+  /** Drop a pending note without judging it. */
+  void(noteId: number): void {
+    if (this.state[noteId] !== 'pending') return;
+    this.state[noteId] = 'void';
+    this.pendingCount--;
   }
 
   classify(absOffset: number): Judgement {
@@ -57,6 +83,10 @@ export class Judge {
     return this.state[noteId] === 'holding';
   }
 
+  isVoid(noteId: number): boolean {
+    return this.state[noteId] === 'void';
+  }
+
   press(lane: number, time: number): JudgementEvent | null {
     const list = this.byLane[lane];
     if (!list || this.holding[lane]) return null;
@@ -67,6 +97,7 @@ export class Judge {
       if (offset > this.windows.good) continue; // too late; update() will miss it
       if (offset < -this.windows.miss) return null; // earliest pending note is too far away
       const judgement = this.classify(Math.abs(offset));
+      this.pendingCount--;
       if (n.endTime !== null && judgement !== 'miss') {
         this.state[n.id] = 'holding';
         this.holding[lane] = n;
@@ -120,6 +151,7 @@ export class Judge {
         if (this.state[n.id] !== 'pending') continue;
         if (time - n.time <= this.windows.good) break;
         this.state[n.id] = 'done';
+        this.pendingCount--;
         out.push({
           noteId: n.id,
           lane,
@@ -131,18 +163,23 @@ export class Judge {
       }
       this.advance(lane);
     }
-    return out;
+    return out.sort((a, b) => a.time - b.time);
   }
 
-  /** True once every note is judged. */
+  /** True when nothing is pending or held. */
   get finished(): boolean {
-    return this.state.every((s) => s === 'done');
+    return this.pendingCount === 0 && this.holding.every((h) => h === null);
   }
 
   private advance(lane: number): void {
     const list = this.byLane[lane]!;
     let c = this.cursor[lane]!;
-    while (c < list.length && this.state[list[c]!.id] === 'done') c++;
+    while (
+      c < list.length &&
+      this.state[list[c]!.id] !== 'pending' &&
+      this.state[list[c]!.id] !== 'holding'
+    )
+      c++;
     this.cursor[lane] = c;
   }
 }

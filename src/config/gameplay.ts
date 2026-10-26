@@ -75,3 +75,19 @@ export const AUTOPLAY = {
   missRate: 0.06,
   seed: 1337,
 };
+
+/** The wonky measure after a failed combo (digicore-style glitch). */
+export const WONKY = {
+  /** Bitcrush wet level 0..1. */
+  crush: 0.85,
+  /** Low-pass sweeps down to this by the end of the measure. */
+  filterHz: 1600,
+  /** Pitch wobble depth (cents) and rate (Hz). */
+  wobbleCents: 70,
+  wobbleHz: 7,
+  /** Tape-stop over the last this-many seconds of the measure, dropping this many cents. */
+  tapeStop: 0.35,
+  tapeStopCents: 1800,
+  /** 1/32 stutter-gate right after the miss (s). */
+  stutterSeconds: 0.3,
+};

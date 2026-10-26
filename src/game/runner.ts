@@ -1,20 +1,21 @@
-import type { SongPlayer } from '../audio/songPlayer';
+import { MusicEngine } from '../audio/musicEngine';
+import type { ActionMusicLayer } from '../audio/musicLayers';
 import type { Sfx } from '../audio/sfx';
-import type { Action } from '../chart/types';
 import { APPROACH_SECONDS, AUTOPLAY } from '../config/gameplay';
+import { musicMapping } from '../config/musicMapping';
 import { CAMERA } from '../config/visuals';
 import type { Settings } from '../core/settings';
 import { ArenaView } from '../render/arenaView';
 import { HudOverlay } from '../render/hudOverlay';
 import type { DigitalRain } from '../render/rain';
-import { autoplayInputs, KeyboardLanes, type LaneInput } from '../rhythm/input';
+import { AutoPlayer, KeyboardLanes } from '../rhythm/input';
 import type { SynthPatch } from '../synth/patch';
 import type { LoadedMap } from './maps';
 import { GameSession } from './session';
 
-/** Seconds of lead-in before audio position 0. */
+/** Seconds of lead-in before game time 0. */
 const LEAD_IN = 2.5;
-/** Seconds after the last note before results. */
+/** Seconds after the last cue before results. */
 const OUTRO = 2;
 
 export interface RunnerElements {
@@ -28,13 +29,21 @@ export interface RunnerHooks {
   onEnd(session: GameSession, failed: boolean): void;
 }
 
-/** Drives one play: clock → inputs → session → views, once per animation frame. */
+export interface RunnerOptions {
+  autoplay: boolean;
+  /** Bars where autoplay misses once on the first try (shows a failed combo + retry). */
+  autoplayFailBars?: number[];
+}
+
+/** Drives one play: clock → inputs → session → music + views, once per animation frame. */
 export class PlayRunner {
   readonly session: GameSession;
+  readonly engine: MusicEngine;
   private readonly arena: ArenaView;
   private readonly hud: HudOverlay;
   private readonly keyboard: KeyboardLanes;
-  private autoQueue: LaneInput[] = [];
+  private readonly layer: ActionMusicLayer;
+  private readonly auto: AutoPlayer | null;
   private raf = 0;
   private lastPerf = 0;
   private ended = false;
@@ -47,35 +56,46 @@ export class PlayRunner {
 
   constructor(
     private readonly els: RunnerElements,
-    private readonly map: LoadedMap,
-    private readonly player: SongPlayer,
+    map: LoadedMap,
+    ctx: AudioContext,
     private readonly sfx: Sfx,
     private readonly rain: DigitalRain,
     private settings: Settings,
     patch: SynthPatch,
-    private readonly autoplay: boolean,
+    private readonly opts: RunnerOptions,
     private readonly hooks: RunnerHooks,
   ) {
     const chart = map.chart;
     this.session = new GameSession(chart, { noFail: settings.noFail, patch });
+    this.engine = new MusicEngine(ctx, chart, map.stems);
     const keys = settings.keys4;
-    this.keyboard = new KeyboardLanes((perf) => this.player.songTimeAt(perf));
-    this.keyboard.setKeys(autoplay ? [] : keys);
+    this.keyboard = new KeyboardLanes((perf) => this.engine.timeAt(perf));
+    this.keyboard.setKeys(opts.autoplay ? [] : keys);
     this.arena = new ArenaView(els.arenaCanvas, els.labelLayer, chart, this.session);
     this.hud = new HudOverlay(els.hudCanvas, chart, this.session, this.arena, keys);
-    if (autoplay)
-      this.autoQueue = autoplayInputs(
-        chart.notes,
-        AUTOPLAY.jitter,
-        AUTOPLAY.missRate,
-        AUTOPLAY.seed,
-      );
-
-    this.session.bus.on('input', (i) => {
-      if (i.down) this.sfx.swing(chart.lanes[i.lane] as Action);
+    this.layer = musicMapping(settings.musicMapping).create({
+      ctx,
+      engine: this.engine,
+      sfx,
+      chart,
+      session: this.session,
     });
+
+    this.auto = opts.autoplay
+      ? new AutoPlayer(
+          AUTOPLAY.jitter,
+          AUTOPLAY.missRate,
+          AUTOPLAY.seed,
+          opts.autoplayFailBars ?? [],
+        )
+      : null;
+    if (this.auto) {
+      const auto = this.auto;
+      this.session.bus.on('cues', (c) => auto.onCues(c));
+      this.session.bus.on('cuesDropped', (ids) => auto.onDropped(ids));
+    }
+
     this.session.bus.on('action', (a) => {
-      if (a.hit && a.kind !== 'holdEnd') this.sfx.hit(a.action, a.judgement === 'perfect');
       if (a.hit && a.action === 'block') this.rain.pulse(0.6);
       if (a.hit && a.action === 'flourish') this.rain.pulse(1);
     });
@@ -83,10 +103,12 @@ export class PlayRunner {
       if (d.type === 'playerHit') {
         this.sfx.hurt();
         glitch();
-      } else if (d.type === 'recovered') {
-        this.sfx.clank();
-      } else if (d.type === 'defeated') {
-        this.sfx.shatter();
+      }
+    });
+    this.session.bus.on('combo', (c) => {
+      if (c.type === 'failed') {
+        this.engine.wonky(c.time, c.until);
+        glitch();
       }
     });
     window.addEventListener('resize', this.onResize);
@@ -95,15 +117,14 @@ export class PlayRunner {
   }
 
   start(): void {
-    this.player.setBuffer(this.map.audio);
     this.applySettings(this.settings);
-    this.player.play(-LEAD_IN);
+    this.engine.start(-LEAD_IN);
     this.lastPerf = performance.now();
     this.raf = requestAnimationFrame(this.frame);
     if (import.meta.env.DEV) {
       // Dev-only hook for automated playtests (scripts/ or CDP).
       (window as unknown as Record<string, unknown>).__vr = {
-        songTime: () => this.player.songTimeAt(performance.now()),
+        songTime: () => this.engine.timeAt(performance.now()),
         session: this.session,
         camera: CAMERA,
       };
@@ -112,9 +133,9 @@ export class PlayRunner {
 
   applySettings(s: Settings): void {
     this.settings = s;
-    this.player.userOffsetSec = s.audioOffsetMs / 1000;
-    this.player.output.gain.cancelScheduledValues(0);
-    this.player.output.gain.value = s.musicVolume;
+    this.engine.userOffsetSec = s.audioOffsetMs / 1000;
+    this.engine.output.gain.cancelScheduledValues(0);
+    this.engine.output.gain.value = s.musicVolume;
     this.sfx.volume = s.hitsoundVolume;
   }
 
@@ -123,20 +144,21 @@ export class PlayRunner {
   }
 
   get paused(): boolean {
-    return !this.player.playing;
+    return !this.engine.playing;
   }
 
   pause(): void {
-    this.player.pause();
+    void this.engine.pause();
   }
 
   resume(): void {
-    this.player.resume();
+    void this.engine.resume();
   }
 
   stop(): void {
     cancelAnimationFrame(this.raf);
-    this.player.stop();
+    this.engine.stop();
+    this.layer.dispose?.();
     this.keyboard.dispose();
     this.arena.dispose();
     window.removeEventListener('resize', this.onResize);
@@ -152,42 +174,43 @@ export class PlayRunner {
     const realDt = (now - this.lastPerf) / 1000;
     const dt = Math.min(0.05, realDt);
     this.lastPerf = now;
-    this.player.sampleClock(now);
-    const t = this.player.songTimeAt(now);
-    if (this.player.playing) {
+    this.engine.sampleClock(now);
+    const t = this.engine.timeAt(now);
+    if (this.engine.playing) {
       const inputs = this.keyboard.drain();
-      while (this.autoQueue.length && this.autoQueue[0]!.time <= t)
-        inputs.push(this.autoQueue.shift()!);
+      if (this.auto) inputs.push(...this.auto.due(t));
       inputs.sort((a, b) => a.time - b.time);
       this.session.step(inputs, t);
+      this.engine.schedule(this.session.conductor.plays, t);
+      this.layer.update?.(t);
     }
     const drawT = t + this.settings.visualOffsetMs / 1000;
     const approach = APPROACH_SECONDS / Math.max(0.25, this.settings.scrollSpeed);
-    this.arena.update(drawT, this.player.playing ? dt : 0, realDt, approach);
-    this.hud.draw(drawT);
+    this.arena.update(drawT, this.engine.playing ? dt : 0, realDt, approach);
+    this.hud.draw(drawT, approach);
     this.rain.update(dt);
     this.hooks.onFrame(this.session, t);
 
     if (this.ended) return;
     if (this.session.duel.down) {
       this.downAt ??= now;
-      this.player.output.gain.value *= 0.95;
+      this.engine.output.gain.value *= 0.95;
       if (now - this.downAt > 1500) this.finish(true);
-    } else if (this.session.judge.finished && t > this.map.chart.lastNoteTime + OUTRO) {
+    } else if (this.session.finished && t > this.session.lastCueEnd() + OUTRO) {
       this.finish(false);
     }
   };
 
   private finish(failed: boolean): void {
     this.ended = true;
-    const g = this.player.output.gain;
-    g.setTargetAtTime(0, this.player.ctx.currentTime, 0.3);
+    const g = this.engine.output.gain;
+    g.setTargetAtTime(0, this.engine.ctx.currentTime, 0.3);
     this.hooks.onEnd(this.session, failed);
   }
 
   /** Touch/click: the nearest lane label or lane at the pointer's x. */
   private pointerLane(e: PointerEvent): void {
-    if (this.autoplay) return;
+    if (this.opts.autoplay) return;
     const rect = this.els.hudCanvas.getBoundingClientRect();
     const { xs, width } = this.arena.laneScreen();
     const x = e.clientX - rect.left;

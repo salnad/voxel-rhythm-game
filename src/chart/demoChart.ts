@@ -1,4 +1,4 @@
-import { composeDemo, DEMO_BPM, DEMO_LENGTH_BEATS } from '../audio/demo/composition';
+import { composeDemo, DEMO_BPM, DEMO_COMBOS, DEMO_LENGTH_BEATS } from '../audio/demo/composition';
 import {
   ACTIONS,
   CHART_FORMAT_ID,
@@ -26,32 +26,32 @@ const ENCOUNTERS: ChartEncounter[] = [
   { beat: 161, enemy: 'knight', name: 'BLADE KNIGHT' },
   { beat: 193, enemy: 'grunt', name: 'GRUNT' },
   { beat: 209, enemy: 'duelist', name: 'DUELIST' },
-  { beat: 225, enemy: 'brute', name: 'BRUTE' },
-  { beat: 241, enemy: 'brute', name: 'DAEMON' },
+  { beat: 225, enemy: 'brute', name: 'DAEMON' },
 ];
 
 /** Each new action gets a prompt a few beats before its first cue. */
 const PROMPTS: ChartPrompt[] = [
-  {
-    beat: 0,
-    action: 'block',
-    text: 'When the enemy winds up, BLOCK on the kick',
-    beats: 10,
-  },
-  { beat: 18, action: 'slash', text: 'When it opens its guard, SLASH on the clap', beats: 10 },
-  { beat: 40, action: 'stab', text: 'Its weak point glows: STAB it on the tick', beats: 8 },
+  { beat: 0, action: 'block', text: 'When the enemy winds up, BLOCK on the 808', beats: 10 },
+  { beat: 18, action: 'slash', text: 'When it opens its guard, SLASH on the lead', beats: 10 },
+  { beat: 40, action: 'stab', text: 'Its weak point glows: STAB it on the snare', beats: 8 },
   {
     beat: 56,
     action: 'flourish',
-    text: 'It staggers: FLOURISH on the crash to finish it',
+    text: 'It staggers: FLOURISH on the vocal to finish it',
     beats: 9,
   },
   {
     beat: 66,
-    text: 'Listen: kick = BLOCK · clap = SLASH · tick = STAB · crash = FLOURISH',
+    text: 'Listen: 808 = BLOCK · lead = SLASH · snare/hats = STAB · vocal = FLOURISH',
     beats: 12,
   },
-  { beat: 161, text: 'Blade lock: HOLD block until the bar ends', action: 'block', beats: 6 },
+  {
+    beat: 158,
+    text: 'BOSS COMBOS: clear the whole measure. One miss and it repeats',
+    beats: 10,
+  },
+  { beat: 168, text: 'Blade lock: HOLD block until the snare', action: 'block', beats: 5 },
+  { beat: 222, text: 'The DAEMON: every measure is a combo', beats: 7 },
 ];
 
 /** Build a demo chart from the composition. Written to public/maps/demo by `npm run gen:demo`. */
@@ -77,25 +77,27 @@ export function buildDemoChart(difficulty: DemoDifficulty = 'normal'): ChartFile
       charter: 'voxel-rhythm demo generator',
       difficulty,
       description:
-        'Hyperpop duel generated in the browser. Kick = block, clap = slash, rim tick = stab, crash = flourish.',
+        'Digicore duel generated in the browser. 808 = block, lead = slash, snare/hats = stab, vocal chops = flourish. Boss combos in the break and the last drop.',
     },
-    audio: { procedural: 'hyperpop-demo', lengthBeats: DEMO_LENGTH_BEATS },
+    audio: { procedural: 'digicore-demo', lengthBeats: DEMO_LENGTH_BEATS },
     timing: { bpm: DEMO_BPM, offsetMs: 0, beatsPerBar: 4 },
     encounters: ENCOUNTERS.map((e) => ({ ...e })),
     prompts: prompts.map((p) => ({ ...p })),
+    combos: DEMO_COMBOS.map((c) => ({ ...c })),
     notes,
   };
 }
 
 /** Compact, diff-friendly JSON: one note, encounter or prompt per line. */
 export function formatChartJson(chart: ChartFile, schemaRef?: string): string {
-  const { notes, encounters, prompts, ...rest } = chart;
+  const { notes, encounters, prompts, combos, ...rest } = chart;
   const line = (o: object) =>
     '    ' + JSON.stringify(o).replace(/,"/g, ', "').replace(/":/g, '": ');
   const head = JSON.stringify(schemaRef ? { $schema: schemaRef, ...rest } : rest, null, 2);
   const parts = [head.slice(0, -2)];
   if (encounters) parts.push(`  "encounters": [\n${encounters.map(line).join(',\n')}\n  ]`);
   if (prompts) parts.push(`  "prompts": [\n${prompts.map(line).join(',\n')}\n  ]`);
+  if (combos) parts.push(`  "combos": [\n${combos.map(line).join(',\n')}\n  ]`);
   parts.push(`  "notes": [\n${notes.map(line).join(',\n')}\n  ]`);
   return `${parts.join(',\n')}\n}\n`;
 }

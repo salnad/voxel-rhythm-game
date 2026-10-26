@@ -1,9 +1,9 @@
 /**
- * On-disk chart format (version 2). See docs/map-format.md and schema/chart.schema.json.
+ * On-disk chart format (version 3). See docs/map-format.md and schema/chart.schema.json.
  * Everything a human or LLM writes lives here; runtime types are derived in build.ts.
  */
 export const CHART_FORMAT_ID = 'voxel-rhythm-chart';
-export const CHART_FORMAT_VERSION = 2;
+export const CHART_FORMAT_VERSION = 3;
 
 /** The four sword actions, left to right. Each is one lane and one key. */
 export const ACTIONS = ['block', 'slash', 'stab', 'flourish'] as const;
@@ -23,7 +23,7 @@ export interface ChartMeta {
 export interface ChartAudio {
   /** Audio file path, relative to the chart file (e.g. "song.mp3"). */
   file?: string;
-  /** Name of a built-in procedural song (e.g. "hyperpop-demo"). */
+  /** Name of a built-in procedural song (e.g. "digicore-demo"). */
   procedural?: string;
   /** Optional song length in beats; used for warnings. */
   lengthBeats?: number;
@@ -66,6 +66,16 @@ export interface ChartPrompt {
   beats?: number;
 }
 
+/**
+ * Boss combos: every measure from `fromBar` to `toBar` (inclusive) that has cues is a combo.
+ * Miss any cue in a combo and the measure repeats, up to `retries` times.
+ */
+export interface ChartCombo {
+  fromBar: number;
+  toBar?: number;
+  retries?: number;
+}
+
 export interface ChartFile {
   format: typeof CHART_FORMAT_ID;
   version: typeof CHART_FORMAT_VERSION;
@@ -75,10 +85,11 @@ export interface ChartFile {
   /** Optional. When omitted, a new enemy starts right after every flourish. */
   encounters?: ChartEncounter[];
   prompts?: ChartPrompt[];
+  combos?: ChartCombo[];
   notes: ChartNote[];
 }
 
-/** Runtime note with absolute times (seconds into the audio file). */
+/** Runtime chart note with chart-timeline times (seconds into the audio file). */
 export interface Note {
   id: number;
   /** Lane index = index into ACTIONS. */
@@ -91,6 +102,20 @@ export interface Note {
   endTime: number | null;
   /** Index of the encounter (enemy) this note belongs to. */
   encounter: number;
+  /** Measure (bar) index. */
+  bar: number;
+}
+
+/** One measure of the chart timeline. */
+export interface Bar {
+  index: number;
+  startBeat: number;
+  /** Chart-timeline (audio file) seconds. */
+  startSec: number;
+  durSec: number;
+  noteIds: number[];
+  /** Set when this measure is a boss combo. */
+  combo: { retries: number } | null;
 }
 
 export interface Encounter {
