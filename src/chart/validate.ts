@@ -5,6 +5,7 @@ import {
   ENEMY_KINDS,
   type Action,
   type BpmChange,
+  type ChartCombo,
   type ChartEncounter,
   type ChartFile,
   type ChartNote,
@@ -16,6 +17,11 @@ import {
 const SAME_BEAT_EPSILON = 1 / 96;
 /** An enemy needs this many beats between walking in and its first cue. */
 export const MIN_WALK_IN_BEATS = 1;
+/** Retries per combo measure when a combo range doesn't say. */
+export const DEFAULT_COMBO_RETRIES = 2;
+export const MAX_COMBO_RETRIES = 5;
+/** Combos need the last beat of the measure free and at least this long (s) to decide a retry. */
+const MIN_DECISION_SECONDS = 0.3;
 
 export type ValidationResult =
   | { ok: true; chart: ChartFile; warnings: string[] }
@@ -59,6 +65,7 @@ export function validateChart(input: unknown): ValidationResult {
     'timing',
     'encounters',
     'prompts',
+    'combos',
     'notes',
   ]);
   for (const k of Object.keys(input)) {
@@ -77,7 +84,10 @@ export function validateChart(input: unknown): ValidationResult {
     err(
       'version',
       `must be ${CHART_FORMAT_VERSION}, got ${describe(input.version)}` +
-        (input.version === 1 ? ' (version 1 used song-element lanes; see docs/map-format.md)' : ''),
+        (input.version === 1
+          ? ' (version 1 used song-element lanes; see docs/map-format.md)'
+          : '') +
+        (input.version === 2 ? ' (version 3 only adds optional "combos"; bump the number)' : ''),
     );
   }
 
@@ -376,6 +386,130 @@ export function validateChart(input: unknown): ValidationResult {
     }
   }
 
+  // combos
+  let outCombos: ChartCombo[] | undefined;
+  const combos = input.combos;
+  if (combos !== undefined) {
+    if (!Array.isArray(combos)) {
+      err(
+        'combos',
+        `must be an array like [{"fromBar": 40, "toBar": 47}], got ${describe(combos)}`,
+      );
+    } else {
+      outCombos = [];
+      let lastBar = -1;
+      combos.forEach((c: unknown, i) => {
+        const p = `combos[${i}]`;
+        if (!isObj(c)) return err(p, `must be an object like {"fromBar": 40}, got ${describe(c)}`);
+        for (const k of Object.keys(c)) {
+          if (k !== 'fromBar' && k !== 'toBar' && k !== 'retries')
+            warnings.push(`${p}.${k}: unknown combo field is ignored`);
+        }
+        const isBar = (v: unknown): v is number => Number.isInteger(v) && (v as number) >= 0;
+        let ok = true;
+        if (!isBar(c.fromBar)) {
+          err(
+            `${p}.fromBar`,
+            `must be a bar index (integer >= 0; bar n starts at beat n * beatsPerBar), got ${describe(c.fromBar)}`,
+          );
+          ok = false;
+        }
+        if (
+          c.toBar !== undefined &&
+          (!isBar(c.toBar) || (isBar(c.fromBar) && c.toBar < c.fromBar))
+        ) {
+          err(`${p}.toBar`, `must be an integer >= fromBar if present, got ${describe(c.toBar)}`);
+          ok = false;
+        }
+        if (
+          c.retries !== undefined &&
+          (!Number.isInteger(c.retries) ||
+            (c.retries as number) < 0 ||
+            (c.retries as number) > MAX_COMBO_RETRIES)
+        ) {
+          err(
+            `${p}.retries`,
+            `must be an integer 0-${MAX_COMBO_RETRIES} if present, got ${describe(c.retries)}`,
+          );
+          ok = false;
+        }
+        if (!ok) return;
+        const from = c.fromBar as number;
+        if (from <= lastBar) {
+          err(
+            `${p}.fromBar`,
+            `overlaps or comes before the previous combo range (which ends at bar ${lastBar})`,
+          );
+          return;
+        }
+        const out: ChartCombo = { fromBar: from };
+        if (c.toBar !== undefined) out.toBar = c.toBar as number;
+        if (c.retries !== undefined) out.retries = c.retries as number;
+        lastBar = out.toBar ?? from;
+        outCombos!.push(out);
+      });
+
+      if (isObj(timing) && isNum(timing.bpm) && outCombos.length > 0 && errors.length === 0) {
+        const bpb = (timing.beatsPerBar as number | undefined) ?? 4;
+        const bpms = [
+          timing.bpm,
+          ...((timing.bpmChanges as BpmChange[] | undefined) ?? []).map((b) => b.bpm),
+        ];
+        if (60 / Math.max(...bpms) < MIN_DECISION_SECONDS) {
+          err(
+            'combos',
+            `need beats of at least ${MIN_DECISION_SECONDS} s (bpm <= ${Math.floor(60 / MIN_DECISION_SECONDS)})`,
+          );
+        }
+        const inCombo = (bar: number) =>
+          outCombos!.some((c) => bar >= c.fromBar && bar <= (c.toBar ?? c.fromBar));
+        for (const n of outNotes) {
+          const bar = Math.floor(n.beat / bpb + 1e-9);
+          if (!inCombo(bar)) continue;
+          const lastBeat = (bar + 1) * bpb - 1;
+          const end = n.beat + (n.length ?? 0);
+          if (end > lastBeat + 1e-9) {
+            err(
+              `notes[${srcIndex.get(n)}]`,
+              `${n.action} at beat ${n.beat}${n.length ? ` (held to ${end})` : ''} is in the last beat of combo bar ${bar} (after beat ${lastBeat}). Leave the last beat of a combo measure empty so the game can decide on a retry`,
+            );
+          }
+        }
+        const starts = outEncounters ?? [];
+        starts.forEach((e, i) => {
+          const bar = Math.floor(e.beat / bpb + 1e-9);
+          if (inCombo(bar) && e.beat > bar * bpb + 1e-9) {
+            err(
+              `encounters[${i}].beat`,
+              `${e.beat} starts inside combo bar ${bar}. Start encounters on a combo bar's first beat or outside combos`,
+            );
+          }
+        });
+        if (
+          !outEncounters &&
+          outNotes.some(
+            (n, i) =>
+              i < outNotes.length - 1 &&
+              n.action === 'flourish' &&
+              inCombo(Math.floor(n.beat / bpb + 1e-9)),
+          )
+        ) {
+          err(
+            'encounters',
+            'are required when a flourish sits inside a combo (the automatic split would start an enemy mid-measure)',
+          );
+        }
+        for (const c of outCombos) {
+          for (let b = c.fromBar; b <= (c.toBar ?? c.fromBar); b++) {
+            if (!outNotes.some((n) => Math.floor(n.beat / bpb + 1e-9) === b)) {
+              warnings.push(`combos: bar ${b} has no notes, so it is not a combo`);
+            }
+          }
+        }
+      }
+    }
+  }
+
   if (errors.length > 0) return { ok: false, errors, warnings };
 
   const t = timing as Obj;
@@ -392,6 +526,7 @@ export function validateChart(input: unknown): ValidationResult {
     },
     ...(outEncounters ? { encounters: outEncounters } : {}),
     ...(outPrompts ? { prompts: outPrompts } : {}),
+    ...(outCombos ? { combos: outCombos } : {}),
     notes: outNotes,
   };
   return { ok: true, chart, warnings };

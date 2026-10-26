@@ -37,6 +37,7 @@ export class ArenaView {
   private readonly held: boolean[];
   private readonly pressAt: number[];
   private readonly hitAt: number[];
+  private readonly dropped = new Map<number, number>();
   private now = 0;
   private shake = 0;
   private hurtAt = -10;
@@ -114,6 +115,9 @@ export class ArenaView {
     session.bus.on('input', (i) => this.onInput(i));
     session.bus.on('action', (a) => this.onAction(a));
     session.bus.on('duel', (d) => this.onDuel(d));
+    session.bus.on('cuesDropped', (ids) => {
+      for (const id of ids) this.dropped.set(id, this.now);
+    });
     this.resize();
   }
 
@@ -320,7 +324,7 @@ export class ArenaView {
     this.now = songTime;
     this.adaptScale(realDt);
     const mods = this.session.mods;
-    const beat = this.chart.tempo.secToBeat(songTime);
+    const beat = this.session.conductor.beatAt(songTime);
     const phase = beat - Math.floor(beat);
     const bob = Math.pow(1 - phase, 3);
 
@@ -347,10 +351,11 @@ export class ArenaView {
     this.highway.update(
       songTime,
       approach,
-      this.session.judge,
+      this.session,
       this.held,
       this.pressAt,
       this.hitAt,
+      this.dropped,
     );
     this.updateEnemies(songTime, phase);
     this.voxels.update(dt);
@@ -382,26 +387,28 @@ export class ArenaView {
   }
 
   private updateEnemies(t: number, phase: number): void {
-    const duel = this.session.duel;
-    const tel = telegraphAt(this.chart, t, {
+    const session = this.session;
+    const duel = session.duel;
+    const k = duel.activeEncounter(t);
+    const start = k === null ? 0 : (session.encounterStart(k) ?? 0);
+    const tel = telegraphAt(k, start, k === null ? [] : session.encounterCues(k), t, {
       lead: DUEL.telegraphLead,
       resolve: DUEL.resolveTime,
       walkIn: this.walkIn,
     });
     const showing = new Set<number>();
     const walkDistance = ARENA.enterDistance - ARENA.duelDistance;
-    const exitOf = (k: number) => {
-      const st = duel.enemies[k]!;
+    const exitOf = (e: number) => {
+      const st = duel.enemies[e]!;
       return st.state === 'defeated' || st.state === 'escaped'
         ? { kind: st.state, age: t - st.stateTime }
         : null;
     };
-    const outcomeOf = (noteId: number) => duel.outcomes[noteId] ?? 'pending';
 
     if (tel.encounter !== null) {
-      const k = tel.encounter;
-      const rig = this.rigFor(k);
-      showing.add(k);
+      const enc = tel.encounter;
+      const rig = this.rigFor(enc);
+      showing.add(enc);
       poseEnemy(rig, {
         t,
         beatPhase: phase,
@@ -412,19 +419,18 @@ export class ArenaView {
         last: tel.last && {
           action: tel.last.action,
           age: tel.last.age,
-          outcome: outcomeOf(tel.last.noteId),
+          outcome: duel.outcome(tel.last.noteId),
         },
-        exit: exitOf(k),
+        exit: exitOf(enc),
       });
       rig.root.position.z = -ARENA.duelDistance + (rig.root.userData.fwd as number);
       // the previous enemy finishes its exit while the next walks in
-      const prev = k - 1;
+      const prev = enc - 1;
       const pe = prev >= 0 ? exitOf(prev) : null;
       if (pe && pe.kind === 'escaped' && pe.age < 0.7) {
         const prig = this.rigFor(prev);
         showing.add(prev);
         const ids = this.chart.encounters[prev]!.noteIds;
-        const lastId = ids[ids.length - 1]!;
         poseEnemy(prig, {
           t,
           beatPhase: phase,
@@ -432,16 +438,16 @@ export class ArenaView {
           walkIn: this.walkIn,
           walkDistance,
           next: null,
-          last: { action: this.chart.notes[lastId]!.action, age: 1, outcome: outcomeOf(lastId) },
+          last: { action: this.chart.notes[ids[ids.length - 1]!]!.action, age: 1, outcome: 'miss' },
           exit: pe,
         });
         prig.root.position.z = -ARENA.duelDistance + (prig.root.userData.fwd as number);
       }
     }
-    for (const [k, rig] of this.enemyRigs) {
-      if (!showing.has(k)) {
+    for (const [e, rig] of this.enemyRigs) {
+      if (!showing.has(e)) {
         this.scene.remove(rig.root);
-        this.enemyRigs.delete(k);
+        this.enemyRigs.delete(e);
       }
     }
   }

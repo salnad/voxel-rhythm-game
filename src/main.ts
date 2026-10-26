@@ -3,6 +3,7 @@ import { SongPlayer } from './audio/songPlayer';
 import { PLAYER } from './config/gameplay';
 import { ACTIONS } from './chart/types';
 import { ACTION_SPECS } from './config/actions';
+import { MUSIC_MAPPINGS } from './config/musicMapping';
 import { KEY_PRESETS, keyLabel, loadSettings, saveSettings, type Settings } from './core/settings';
 import {
   fetchMapIndex,
@@ -29,6 +30,8 @@ const rain = new DigitalRain($('rain'));
 let runner: PlayRunner | null = null;
 let lastMap: LoadedMap | null = null;
 let autoplay = params.get('autoplay') === '1';
+/** `?failbars=41,57`: autoplay misses once on the first try of these bars (demo a retry). */
+const autoplayFailBars = (params.get('failbars') ?? '').split(',').filter(Boolean).map(Number);
 let screen: 'menu' | 'play' | 'pause' | 'results' | 'other' = 'menu';
 
 const synth = new SynthPanel($('synth-mount'), (p) => runner?.setPatch(p));
@@ -99,6 +102,7 @@ async function menu(): Promise<void> {
       ${settings.keys4.map((k) => `<kbd>${esc(keyLabel(k))}</kbd>`).join(' ')} block / slash / stab / flourish (change keys in SETTINGS) &nbsp; hold long cues<br>
       <kbd>Esc</kbd> pause &nbsp; <kbd>Tab</kbd> show/hide the sword synth &nbsp; <kbd>R</kbd> retry on results<br>
       One enemy at a time. Read its telegraph, hit the matching action as its cue reaches the line.
+      Gold-railed measures are BOSS COMBOS: miss once and you take damage, the music glitches, and the measure repeats.
       Start with EASY. Tweak the WAVETABLE synth to change your sword: WT POS reshapes slashes,
       UNISON adds echo blades that build ECHO PARRY (it saves you from a missed block).
     </div>`);
@@ -158,12 +162,12 @@ function startPlay(map: LoadedMap) {
   runner = new PlayRunner(
     { arenaCanvas: $('arena'), hudCanvas: $('hud'), labelLayer: $('labels') },
     map,
-    player,
+    player.ctx,
     sfx,
     rain,
     settings,
     synth.patch,
-    autoplay,
+    { autoplay, autoplayFailBars },
     { onFrame: hud, onEnd: results },
   );
   runner.start();
@@ -232,6 +236,7 @@ function results(s: GameSession, failed: boolean) {
       <div>PERFECT / GREAT / GOOD / MISS</div><div>${sc.counts.perfect} / ${sc.counts.great} / ${sc.counts.good} / ${sc.counts.miss}</div>
       <div>ENEMIES DEFEATED</div><div>${s.duel.defeated} / ${s.chart.encounters.length}${s.duel.escaped ? ` (${s.duel.escaped} escaped)` : ''}</div>
       <div>HITS TAKEN</div><div>${s.duel.hitsTaken}</div>
+      <div>BOSS COMBOS CLEARED / FAILED</div><div>${s.combosCleared} / ${s.combosFailed}</div>
       <div>MEAN HIT OFFSET</div><div>${mean >= 0 ? '+' : ''}${mean.toFixed(1)} ms (${mean >= 0 ? 'late' : 'early'})</div>
     </div>
     ${!autoplay && Math.abs(mean) > 8 ? `<div class="help">Your hits average ${mean.toFixed(0)} ms ${mean > 0 ? 'late' : 'early'}. <button class="btn" id="r-apply">set audio offset to ${suggest} ms</button></div>` : ''}
@@ -275,10 +280,17 @@ function settingsScreen() {
         .join('')}
       <span>key preset</span><span><select id="s-preset">${KEY_PRESETS.map((p, i) => `<option value="${i}" ${p.keys.join() === settings.keys4.join() ? 'selected' : ''}>${p.name}</option>`).join('')}<option value="-1" ${KEY_PRESETS.some((p) => p.keys.join() === settings.keys4.join()) ? '' : 'selected'}>custom</option></select></span><span></span>
       <span>action keys</span><span id="s-keys">${keyButtons()}</span><span></span>
+      <span>actions → music</span><span><select id="s-music">${Object.entries(MUSIC_MAPPINGS)
+        .map(
+          ([k, m]) =>
+            `<option value="${k}" ${k === settings.musicMapping ? 'selected' : ''}>${m.label}</option>`,
+        )
+        .join('')}</select></span><span></span>
     </div>
     <div class="help">Audio offset: positive if you tend to hit late (or your audio output is delayed). Use CALIBRATE to measure it.<br>
     Visual offset only moves the cue drawing. Cue speed: higher = cues arrive faster and sit further apart.<br>
-    Pick a preset, or click an action's key and press the new key.</div>
+    Pick a preset, or click an action's key and press the new key.<br>
+    Actions → music picks how your moves interact with the song (applies on the next play).</div>
     <button class="big" id="s-back">BACK</button>`);
   el.querySelectorAll<HTMLInputElement>('input[data-k]').forEach((inp) => {
     inp.oninput = () => {
@@ -313,6 +325,10 @@ function settingsScreen() {
     });
   };
   bindKeys();
+  el.querySelector<HTMLSelectElement>('#s-music')!.onchange = (e) => {
+    settings = { ...settings, musicMapping: (e.target as HTMLSelectElement).value };
+    saveSettings(settings);
+  };
   el.querySelector<HTMLSelectElement>('#s-preset')!.onchange = (e) => {
     const p = KEY_PRESETS[Number((e.target as HTMLSelectElement).value)];
     if (!p) return;

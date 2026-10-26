@@ -1,4 +1,4 @@
-# Map format (chart v2: action lanes)
+# Map format (chart v3: action lanes + boss combos)
 
 A **map** is an audio file plus a **chart**: a plain JSON file of sword actions in time.
 This page is written so a person or an LLM can chart a song from scratch.
@@ -30,7 +30,7 @@ encounter starts. End each encounter on a `flourish`: that's the finisher.
 ```json
 {
   "format": "voxel-rhythm-chart",
-  "version": 2,
+  "version": 3,
   "meta": { "title": "My Song", "artist": "Someone", "charter": "me", "difficulty": "easy" },
   "audio": { "file": "song.mp3" },
   "timing": { "bpm": 120, "offsetMs": 230, "beatsPerBar": 4 },
@@ -39,13 +39,15 @@ encounter starts. End each encounter on a `flourish`: that's the finisher.
     { "beat": 17, "enemy": "brute", "name": "BIG ONE" }
   ],
   "prompts": [{ "beat": 0, "action": "block", "text": "When it winds up, BLOCK on the kick" }],
+  "combos": [{ "fromBar": 5 }],
   "notes": [
     { "beat": 4, "action": "block" },
     { "beat": 8, "action": "block" },
     { "beat": 10, "action": "slash" },
     { "beat": 12, "action": "stab" },
     { "beat": 16, "action": "flourish" },
-    { "beat": 20, "action": "block", "length": 2 },
+    { "beat": 20, "action": "block", "length": 1 },
+    { "beat": 22, "action": "stab" },
     { "beat": 24, "action": "flourish" }
   ]
 }
@@ -56,10 +58,10 @@ encounter starts. End each encounter on a `flourish`: that's the finisher.
 | Field                | Required | Meaning                                                                                     |
 | -------------------- | -------- | ------------------------------------------------------------------------------------------- |
 | `format`             | yes      | Always `"voxel-rhythm-chart"`.                                                              |
-| `version`            | yes      | Always `2`.                                                                                 |
+| `version`            | yes      | Always `3`.                                                                                 |
 | `meta.title`         | yes      | Song title. `artist`, `charter`, `difficulty`, `description` are optional strings.          |
 | `audio.file`         | one of   | Audio path relative to the chart file (mp3, ogg, wav: anything the browser decodes).        |
-| `audio.procedural`   | one of   | A built-in generated song instead of a file. Currently only `"hyperpop-demo"`.              |
+| `audio.procedural`   | one of   | A built-in generated song instead of a file. Currently only `"digicore-demo"`.              |
 | `audio.lengthBeats`  | no       | Song length in beats. Used only for a warning if notes run past it.                         |
 | `timing.bpm`         | yes      | Tempo, 20 to 400.                                                                           |
 | `timing.offsetMs`    | yes      | Milliseconds into the audio where **beat 0** falls (the first downbeat you chart against).  |
@@ -67,6 +69,7 @@ encounter starts. End each encounter on a `flourish`: that's the finisher.
 | `timing.bpmChanges`  | no       | `[{ "beat": 64, "bpm": 170 }]`. Each change applies from that beat on. Beats must increase. |
 | `encounters`         | no       | The enemies, in order (see below). Omit to start a new enemy right after every `flourish`.  |
 | `prompts`            | no       | On-screen tutorial text (see below).                                                        |
+| `combos`             | no       | Boss combo measures (see below).                                                            |
 | `notes`              | yes      | The cues. Order doesn't matter (they get sorted, with a warning).                           |
 
 There is no `lanes` field any more: the lanes are always `block, slash, stab, flourish`.
@@ -112,6 +115,33 @@ encounter 1 beat later, and give the new enemy its first cue 1 to 2 beats after 
 Text shown at the top of the screen from `beat` for `beats` beats (default 8). With
 `action`, the prompt shows that action's icon, colour and the player's key.
 
+### Combos
+
+```json
+{ "fromBar": 41, "toBar": 46, "retries": 2 }
+```
+
+Every measure from `fromBar` to `toBar` (inclusive; `toBar` defaults to `fromBar`) that has
+cues is a **boss combo**. Bar `n` starts at beat `n * beatsPerBar` (bar 0 = beats 0-3 in 4/4).
+
+- Clear a combo by hitting every cue in its measure.
+- Miss any cue and: the player takes damage, the music goes wonky for the rest of the measure
+  (bitcrush, pitch wobble, stutter, tape-stop), the measure's remaining cues are voided, and
+  **the same measure repeats** next (music and cues), up to `retries` times (default 2, max 5).
+  After the last retry the song moves on.
+- The game timeline is adaptive: everything after a repeated measure plays one measure later.
+  Audio-file maps loop that measure's slice of the file.
+
+Rules (the validator enforces them):
+
+- **Leave the last beat of a combo measure empty.** In 4/4, cues (and hold ends) must be at
+  beat `n*4 + 3` or earlier. The game needs that beat to decide whether to repeat the measure
+  before it has to schedule the music.
+- An encounter can't start in the middle of a combo measure (start it on the bar's first beat).
+- Combos need beats of at least 0.3 s (bpm ≤ 200).
+- With combos, prefer explicit `encounters`; a `flourish` inside a combo that isn't the last
+  note needs them.
+
 ## How beats become time
 
 ```
@@ -138,7 +168,9 @@ before the first note you chart.
    - Mix actions only after all four are introduced; then add density in the drops.
    - Easy: no two cues closer than 1 beat, no holds. Normal: eighth notes are fine in the
      loud sections; avoid sixteenths.
-5. Validate with `npm run validate-chart -- chart.json`, fix every error by its path
+5. Optionally turn a boss's phrase into `combos`: 3 to 6 cues per measure, last beat empty.
+   Introduce combos with a prompt in a calmer section before using them in a drop.
+6. Validate with `npm run validate-chart -- chart.json`, fix every error by its path
    (e.g. `notes[12].action: "kick" (string) is not one of [block, slash, stab, flourish]`), then
    playtest. Use the editor to nudge `offsetMs` if every cue feels uniformly early or late.
 
@@ -156,6 +188,10 @@ Put `chart.json` and the audio in `public/maps/<id>/`, then add an entry to `pub
 ```
 
 Players can also skip this. From the menu, CUSTOM MAP takes a chart file plus an audio file.
+
+## Changes from version 2
+
+Version 3 adds the optional `combos` field. A v2 chart becomes v3 by changing `"version"` to 3.
 
 ## Changes from version 1
 

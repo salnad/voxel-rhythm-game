@@ -1,5 +1,3 @@
-import type { Note } from '../chart/types';
-
 /** A lane press/release in song time. Keyboard, touch and autoplay all produce these. */
 export interface LaneInput {
   lane: number;
@@ -71,28 +69,76 @@ export function rng(seed: number): () => number {
   };
 }
 
+/** What the autoplayer needs to know about a cue. */
+export interface AutoCue {
+  id: number;
+  lane: number;
+  time: number;
+  endTime: number | null;
+  bar: number;
+  attempt: number;
+}
+
 /**
- * Scripted "bot" input for demos and soak tests. It goes through the real judge,
- * with gaussian timing jitter and a deliberate miss rate.
+ * Scripted "bot" input for demos and soak tests. It goes through the real judge, with
+ * gaussian timing jitter and a deliberate miss rate. Cues arrive as the adaptive timeline
+ * plans them, and dropped cues are forgotten. `failFirstTry` lists bars where it misses one
+ * cue on the first attempt, to show a failed combo and its retry.
  */
-export function autoplayInputs(
-  notes: readonly Note[],
-  jitter: number,
-  missRate: number,
-  seed: number,
-): LaneInput[] {
-  const r = rng(seed);
-  const gauss = () => {
-    const u = Math.max(1e-9, r());
-    return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * r());
-  };
-  const out: LaneInput[] = [];
-  for (const n of notes) {
-    if (r() < missRate) continue;
-    const t = n.time + gauss() * jitter;
-    out.push({ lane: n.lane, down: true, time: t, auto: true });
-    const up = n.endTime !== null ? n.endTime + 0.01 : t + 0.05;
-    out.push({ lane: n.lane, down: false, time: up, auto: true });
+export class AutoPlayer {
+  private readonly queue: Array<LaneInput & { cue: number }> = [];
+  private readonly r: () => number;
+  private readonly failed = new Set<number>();
+
+  constructor(
+    private readonly jitter: number,
+    private readonly missRate: number,
+    seed: number,
+    private readonly failFirstTry: readonly number[] = [],
+  ) {
+    this.r = rng(seed);
   }
-  return out.sort((a, b) => a.time - b.time || (a.down === b.down ? 0 : a.down ? 1 : -1));
+
+  private gauss(): number {
+    const u = Math.max(1e-9, this.r());
+    return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * this.r());
+  }
+
+  onCues(cues: readonly AutoCue[]): void {
+    for (const c of cues) {
+      if (c.attempt === 1 && this.failFirstTry.includes(c.bar) && !this.failed.has(c.bar)) {
+        // skip the second cue of the measure (or the first if there's only one)
+        const skipIndex = cues.filter((x) => x.bar === c.bar && x.attempt === 1).length > 1 ? 1 : 0;
+        const nth = cues.filter((x) => x.bar === c.bar && x.attempt === 1).indexOf(c);
+        if (nth === skipIndex) {
+          this.failed.add(c.bar);
+          continue;
+        }
+      }
+      if (this.r() < this.missRate) continue;
+      const t = c.time + this.gauss() * this.jitter;
+      this.queue.push({ lane: c.lane, down: true, time: t, auto: true, cue: c.id });
+      const up = c.endTime !== null ? c.endTime + 0.01 : t + 0.05;
+      this.queue.push({ lane: c.lane, down: false, time: up, auto: true, cue: c.id });
+    }
+    this.queue.sort((a, b) => a.time - b.time || (a.down === b.down ? 0 : a.down ? 1 : -1));
+  }
+
+  onDropped(ids: readonly number[]): void {
+    const drop = new Set(ids);
+    for (let i = this.queue.length - 1; i >= 0; i--) {
+      const q = this.queue[i]!;
+      if (drop.has(q.cue) && q.down) this.queue.splice(i, 1);
+    }
+  }
+
+  /** Inputs due by time t, in order. */
+  due(t: number): LaneInput[] {
+    const out: LaneInput[] = [];
+    while (this.queue.length && this.queue[0]!.time <= t) {
+      const q = this.queue.shift()!;
+      out.push({ lane: q.lane, down: q.down, time: q.time, auto: true });
+    }
+    return out;
+  }
 }

@@ -13,7 +13,7 @@ const schemaValidate = ajv.compile(schema);
 
 const minimal = () => ({
   format: 'voxel-rhythm-chart',
-  version: 2,
+  version: 3,
   meta: { title: 'Test' },
   audio: { file: 'song.mp3' },
   timing: { bpm: 120, offsetMs: 100 },
@@ -57,7 +57,7 @@ describe('validateChart', () => {
     const errors = errorsOf(c);
     expect(errors.some((e) => e.startsWith('lanes: was removed in version 2'))).toBe(true);
     expect(errors.some((e) => e.startsWith('notes[3].lane: was removed'))).toBe(true);
-    expect(errors.some((e) => e.startsWith('version: must be 2') && e.includes('version 1'))).toBe(
+    expect(errors.some((e) => e.startsWith('version: must be 3') && e.includes('version 1'))).toBe(
       true,
     );
   });
@@ -118,7 +118,7 @@ describe('validateChart', () => {
   });
 
   it('reports JSON syntax errors with a location', () => {
-    const r = parseChartText('{\n  "format": "voxel-rhythm-chart",\n  "version": 2,,\n}');
+    const r = parseChartText('{\n  "format": "voxel-rhythm-chart",\n  "version": 3,,\n}');
     expect(r.ok).toBe(false);
     if (r.ok) return;
     expect(r.errors[0]).toMatch(/invalid JSON.*line 3/);
@@ -136,6 +136,74 @@ describe('validateChart', () => {
       expect(schemaValidate(bad)).toBe(false);
       expect(validateChart(bad).ok).toBe(false);
     }
+  });
+});
+
+describe('combos', () => {
+  const comboChart = () => ({
+    ...minimal(),
+    timing: { bpm: 120, offsetMs: 0 },
+    encounters: [{ beat: 0 }],
+    notes: [
+      { beat: 4, action: 'block' },
+      { beat: 5, action: 'slash' },
+      { beat: 7, action: 'stab' },
+      { beat: 12, action: 'flourish' },
+    ] as Array<Record<string, unknown>>,
+    combos: [{ fromBar: 1 }] as Array<Record<string, unknown>>,
+  });
+
+  it('accepts a combo measure that leaves its last beat free', () => {
+    const r = validateChart(comboChart());
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const chart = buildChart(r.chart);
+    expect(chart.bars[1]!.combo).toEqual({ retries: 2 });
+    expect(chart.bars[0]!.combo).toBeNull();
+    expect(chart.bars[1]!.noteIds).toEqual([0, 1, 2]);
+  });
+
+  it('rejects cues in the last beat of a combo measure', () => {
+    const c = comboChart();
+    c.notes.push({ beat: 7.5, action: 'slash' });
+    expect(
+      errorsOf(c).some(
+        (e) => e.startsWith('notes[4]: slash at beat 7.5') && e.includes('last beat'),
+      ),
+    ).toBe(true);
+    const h = comboChart();
+    h.notes[0] = { beat: 4, action: 'block', length: 3.5 };
+    h.notes.splice(1, 2);
+    expect(errorsOf(h).some((e) => e.includes('held to 7.5'))).toBe(true);
+  });
+
+  it('rejects bad ranges and encounters that start inside a combo', () => {
+    const c = comboChart();
+    c.combos = [
+      { fromBar: 2, toBar: 1 },
+      { fromBar: 1 },
+      { fromBar: 0.5 },
+      { fromBar: 3, retries: 9 },
+    ];
+    const errors = errorsOf(c);
+    expect(errors.some((e) => e.startsWith('combos[0].toBar'))).toBe(true);
+    expect(errors.some((e) => e.startsWith('combos[2].fromBar'))).toBe(true);
+    expect(errors.some((e) => e.startsWith('combos[3].retries'))).toBe(true);
+    const e2 = { ...comboChart(), encounters: [{ beat: 0 }, { beat: 5 }] };
+    expect(
+      errorsOf(e2).some(
+        (e) => e.startsWith('encounters[1].beat') && e.includes('inside combo bar 1'),
+      ),
+    ).toBe(true);
+  });
+
+  it('warns about combo bars without cues, and agrees with the schema', () => {
+    const c = { ...comboChart(), combos: [{ fromBar: 1, toBar: 2 }] };
+    const r = validateChart(c);
+    expect(r.ok).toBe(true);
+    expect(r.warnings).toContain('combos: bar 2 has no notes, so it is not a combo');
+    expect(schemaValidate(c)).toBe(true);
+    expect(schemaValidate({ ...c, combos: [{ toBar: 2 }] })).toBe(false);
   });
 });
 

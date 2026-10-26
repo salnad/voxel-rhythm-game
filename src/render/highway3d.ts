@@ -3,10 +3,12 @@ import type { Chart } from '../chart/build';
 import { ACTIONS, type Action } from '../chart/types';
 import { ACTION_SPECS } from '../config/actions';
 import { ARENA } from '../config/visuals';
-import type { Judge } from '../rhythm/judge';
+import type { GameSession } from '../game/session';
 import { drawActionIcon, hexA } from './icons';
 
 const DEG = Math.PI / 180;
+export const COMBO_COLOR = '#ffd23b';
+export const RETRY_COLOR = '#ff3b5c';
 
 function canvasTexture(w: number, h: number, draw: (c: CanvasRenderingContext2D) => void) {
   const cv = document.createElement('canvas');
@@ -95,6 +97,8 @@ export class Highway3D {
   private readonly beatLines: THREE.Mesh[] = [];
   private readonly pools: CueMesh[][] = [];
   private readonly hitLine: THREE.Mesh;
+  private readonly rails: THREE.Mesh[] = [];
+  private readonly railMats: THREE.MeshBasicMaterial[] = [];
   private readonly tilt = ARENA.cueTiltDeg * DEG;
 
   constructor(
@@ -222,6 +226,26 @@ export class Highway3D {
         }),
     );
     for (let i = 0; i < ACTIONS.length; i++) this.pools.push([]);
+
+    // combo measure rails along both highway edges
+    const railGeo = new THREE.PlaneGeometry(0.16, 1);
+    for (let i = 0; i < 8; i++) {
+      const mat = new THREE.MeshBasicMaterial({
+        color: COMBO_COLOR,
+        transparent: true,
+        opacity: 0.8,
+        depthWrite: false,
+        depthTest: false,
+        blending: THREE.AdditiveBlending,
+      });
+      const m = new THREE.Mesh(railGeo, mat);
+      m.rotation.x = -Math.PI / 2;
+      m.renderOrder = 8;
+      m.visible = false;
+      this.group.add(m);
+      this.rails.push(m);
+      this.railMats.push(mat);
+    }
   }
 
   laneX(i: number): number {
@@ -269,28 +293,58 @@ export class Highway3D {
   update(
     t: number,
     approach: number,
-    judge: Judge,
+    session: GameSession,
     held: readonly boolean[],
     pressAt: readonly number[],
     hitAt: readonly number[],
+    dropped: ReadonlyMap<number, number>,
   ): void {
     const L = ARENA.highwayLength;
-    // beat lines
-    const tempo = this.chart.tempo;
-    const firstBeat = Math.ceil(tempo.secToBeat(t - 0.05));
-    const lastBeat = Math.floor(tempo.secToBeat(t + approach));
+    const judge = session.judge;
+    const bpb = this.chart.beatsPerBar;
+    // beat lines and combo rails, from the measure plan (retries included)
     let bi = 0;
-    for (let b = firstBeat; b <= lastBeat && bi < this.beatLines.length; b++) {
-      const z = this.cueZ(tempo.beatToSec(b), t, approach) + ARENA.cueDepth * 0.5;
-      const m = this.beatLines[bi++]!;
-      const bar = b % this.chart.beatsPerBar === 0;
-      m.visible = true;
-      m.position.set(0, 0.014, z);
-      m.scale.y = bar ? 0.06 : 0.03;
-      const far = (this.hitZ - z) / L;
-      (m.material as THREE.MeshBasicMaterial).opacity = (bar ? 0.32 : 0.12) * (1 - far * 0.7);
+    let ri = 0;
+    for (const p of session.conductor.plays) {
+      if (p.start > t + approach) break;
+      if (p.start + p.dur < t - 0.1) continue;
+      for (let b = 0; b < bpb && bi < this.beatLines.length; b++) {
+        const bt = p.start + (p.dur * b) / bpb;
+        if (bt < t - 0.05 || bt > t + approach) continue;
+        const z = this.cueZ(bt, t, approach) + ARENA.cueDepth * 0.5;
+        const m = this.beatLines[bi++]!;
+        m.visible = true;
+        m.position.set(0, 0.014, z);
+        m.scale.y = b === 0 ? 0.06 : 0.03;
+        const far = (this.hitZ - z) / L;
+        (m.material as THREE.MeshBasicMaterial).opacity = (b === 0 ? 0.32 : 0.12) * (1 - far * 0.7);
+      }
+      if (p.combo && ri + 1 < this.rails.length) {
+        const z0 = Math.min(
+          this.hitZ + 0.6,
+          this.cueZ(p.start, t, approach) + ARENA.cueDepth * 0.5,
+        );
+        const z1 = Math.max(
+          this.hitZ - L,
+          this.cueZ(p.start + p.dur, t, approach) + ARENA.cueDepth * 0.5,
+        );
+        if (z0 > z1) {
+          const failed = p.status === 'failed';
+          const color = p.attempt > 1 || failed ? RETRY_COLOR : COMBO_COLOR;
+          for (const side of [-1, 1]) {
+            const r = this.rails[ri]!;
+            const mat = this.railMats[ri++]!;
+            r.visible = true;
+            r.position.set(side * (ARENA.laneWidth * 2 + 0.12), 0.02, (z0 + z1) / 2);
+            r.scale.y = z0 - z1 - 0.06;
+            mat.color.set(color);
+            mat.opacity = failed ? 0.35 + 0.35 * Math.sin(t * 40) : 0.8;
+          }
+        }
+      }
     }
     for (; bi < this.beatLines.length; bi++) this.beatLines[bi]!.visible = false;
+    for (; ri < this.rails.length; ri++) this.rails[ri]!.visible = false;
 
     // receptors + lane floors react to presses and hits
     this.receptors.forEach((r, i) => {
@@ -303,25 +357,28 @@ export class Highway3D {
       this.laneFloors[i]!.opacity = 0.09 + pressK * 0.12 + hitK * 0.25;
     });
 
-    // cues
+    // cues (voided ones flash red and fall away for a moment)
     const used = new Array<number>(ACTIONS.length).fill(0);
-    for (const n of this.chart.notes) {
-      if (n.time > t + approach + 0.05) break;
-      const end = n.endTime ?? n.time;
-      if (end < t - 0.3) continue;
+    for (const n of session.conductor.cues) {
+      if (n.removed || n.time > t + approach + 0.05) continue;
+      if ((n.endTime ?? n.time) < t - 0.3) continue;
       const pending = judge.isPending(n.id);
       const holding = judge.isHolding(n.id);
-      if (!pending && !holding) continue;
+      const droppedAt = judge.isVoid(n.id) ? dropped.get(n.id) : undefined;
+      const voidAge = droppedAt === undefined ? Infinity : t - droppedAt;
+      if (!pending && !holding && !(voidAge < 0.3)) continue;
       const c = this.cueMesh(n.lane, used[n.lane]!++);
       const headZ = holding ? this.hitZ : this.cueZ(n.time, t, approach);
       const far = (this.hitZ - headZ) / L;
       const fadeIn = Math.min(1, (1 - far) / 0.12);
       const late = pending && t > n.time;
       c.tile.visible = true;
-      this.placeTile(c.tile, n.lane, headZ, 0.03);
+      this.placeTile(c.tile, n.lane, headZ, 0.03 + (voidAge < 0.3 ? voidAge * 1.5 : 0));
       const mat = c.tile.material as THREE.MeshBasicMaterial;
-      mat.opacity = Math.max(0, fadeIn) * (late ? 0.45 : 1);
-      if (n.endTime !== null) {
+      mat.opacity =
+        Math.max(0, fadeIn) * (late ? 0.45 : 1) * (voidAge < 0.3 ? 1 - voidAge / 0.3 : 1);
+      mat.color.set(voidAge < 0.3 ? RETRY_COLOR : '#ffffff');
+      if (n.endTime !== null && voidAge === Infinity) {
         const tailZ = Math.max(this.hitZ - L, this.cueZ(n.endTime, t, approach));
         const len = Math.max(0.01, headZ - tailZ);
         c.body.visible = true;
@@ -338,7 +395,8 @@ export class Highway3D {
       }
     });
 
+    const beat = session.conductor.beatAt(t);
     (this.hitLine.material as THREE.MeshBasicMaterial).opacity =
-      0.7 + 0.3 * Math.pow(1 - (tempo.secToBeat(t) % 1), 3);
+      0.7 + 0.3 * Math.pow(1 - (beat - Math.floor(beat)), 3);
   }
 }

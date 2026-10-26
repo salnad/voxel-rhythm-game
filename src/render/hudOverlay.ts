@@ -1,11 +1,13 @@
+import * as THREE from 'three';
 import type { Chart } from '../chart/build';
 import { ACTIONS } from '../chart/types';
 import { ACTION_SPECS } from '../config/actions';
 import { HUD, PALETTE } from '../config/visuals';
 import { keyLabel } from '../core/settings';
-import type { GameSession } from '../game/session';
+import type { ComboEvent, GameSession } from '../game/session';
 import type { Judgement, JudgementEvent } from '../rhythm/judge';
 import type { ArenaView } from './arenaView';
+import { COMBO_COLOR, RETRY_COLOR } from './highway3d';
 import { drawActionIcon, hexA } from './icons';
 
 const LABEL: Record<Judgement, string> = {
@@ -19,6 +21,7 @@ const LABEL: Record<Judgement, string> = {
 export class HudOverlay {
   private readonly ctx: CanvasRenderingContext2D;
   private judgementText: { j: Judgement; offset: number; at: number } | null = null;
+  private comboBanner: { e: ComboEvent; at: number } | null = null;
   private dpr = 1;
 
   constructor(
@@ -30,6 +33,7 @@ export class HudOverlay {
   ) {
     this.ctx = canvas.getContext('2d')!;
     session.bus.on('judgement', (e) => this.onJudgement(e));
+    session.bus.on('combo', (e) => (this.comboBanner = { e, at: this.now }));
     this.resize();
   }
 
@@ -45,7 +49,7 @@ export class HudOverlay {
     this.judgementText = { j: e.judgement, offset: e.offset, at: this.now };
   }
 
-  draw(t: number): void {
+  draw(t: number, approach: number): void {
     this.now = t;
     const { ctx } = this;
     const W = this.canvas.width / this.dpr;
@@ -59,11 +63,15 @@ export class HudOverlay {
     this.drawLaneLabels(lanes, W, H);
     this.drawJudgement(t, lanes, W);
     this.drawCombo(lanes, W);
+    this.drawComboTags(t, approach);
     this.drawPrompt(t, W, H);
     this.drawEnemyBanner(t, W);
+    this.drawComboBanner(t, W, H);
     this.drawTimingBar(W, H);
 
-    const p = Math.max(0, Math.min(1, t / Math.max(1, this.chart.lastNoteTime)));
+    const bars = this.chart.bars;
+    const beat = this.session.conductor.beatAt(t);
+    const p = Math.max(0, Math.min(1, beat / Math.max(1, bars.length * this.chart.beatsPerBar)));
     ctx.fillStyle = 'rgba(57,255,106,0.18)';
     ctx.fillRect(0, 0, W, 3);
     ctx.fillStyle = PALETTE.green;
@@ -137,12 +145,82 @@ export class HudOverlay {
     ctx.textAlign = 'center';
   }
 
+  /** "COMBO" / "RETRY 2/3" tags at each combo measure's bar line on the highway. */
+  private drawComboTags(t: number, approach: number) {
+    const { ctx } = this;
+    const hw = this.arena.highway;
+    for (const p of this.session.conductor.plays) {
+      if (p.start > t + approach) break;
+      if (!p.combo || p.start + p.dur < t) continue;
+      const z = p.start > t ? hw.cueZ(p.start, t, approach) : hw.hitZ;
+      const at = this.arena.toScreen(new THREE.Vector3(hw.laneX(3) + 0.75, 0, z));
+      const retry = p.attempt > 1;
+      const color = retry || p.status === 'failed' ? RETRY_COLOR : COMBO_COLOR;
+      const label =
+        p.status === 'failed'
+          ? 'FAILED'
+          : retry
+            ? `RETRY ${p.attempt - 1}/${p.maxAttempts - 1}`
+            : 'COMBO';
+      ctx.font = 'bold 13px monospace';
+      ctx.textAlign = 'left';
+      ctx.fillStyle = 'rgba(0,0,0,0.6)';
+      const w = ctx.measureText(label).width + 12;
+      ctx.fillRect(at.x, at.y - 10, w, 20);
+      ctx.fillStyle = color;
+      ctx.fillText(label, at.x + 6, at.y + 1);
+      ctx.textAlign = 'center';
+    }
+  }
+
+  private drawComboBanner(t: number, W: number, H: number) {
+    const cb = this.comboBanner;
+    const { ctx } = this;
+    const play = this.session.conductor.playAt(t);
+    if (play?.combo) {
+      const retry = play.attempt > 1;
+      ctx.font = 'bold 14px monospace';
+      ctx.fillStyle = retry || play.status === 'failed' ? RETRY_COLOR : COMBO_COLOR;
+      ctx.fillText(
+        play.status === 'failed'
+          ? 'COMBO BROKEN'
+          : retry
+            ? `BOSS COMBO · RETRY ${play.attempt - 1}/${play.maxAttempts - 1}`
+            : 'BOSS COMBO · clear the measure',
+        W / 2,
+        64,
+      );
+    }
+    if (!cb) return;
+    const age = t - cb.at;
+    const life = cb.e.type === 'failed' ? 1.1 : 0.7;
+    if (age < 0 || age > life) return;
+    const k = 1 - age / life;
+    ctx.globalAlpha = Math.min(1, k * 2.5);
+    const failed = cb.e.type === 'failed';
+    const color = failed ? RETRY_COLOR : COMBO_COLOR;
+    ctx.shadowColor = color;
+    ctx.shadowBlur = 20;
+    ctx.fillStyle = color;
+    ctx.font = `bold ${Math.round(34 + 8 * k)}px monospace`;
+    const y = H * 0.27;
+    ctx.fillText(failed ? 'COMBO FAILED' : 'COMBO CLEAR', W / 2, y);
+    ctx.shadowBlur = 0;
+    if (cb.e.type === 'failed') {
+      ctx.font = 'bold 16px monospace';
+      ctx.fillStyle = PALETTE.white;
+      ctx.fillText(cb.e.retry ? 'again next measure' : 'no retries left: moving on', W / 2, y + 32);
+    }
+    ctx.globalAlpha = 1;
+  }
+
   private drawPrompt(t: number, W: number, H: number) {
-    const active = this.chart.prompts.filter((p) => t >= p.time && t < p.endTime);
+    const ct = this.chart.tempo.beatToSec(this.session.conductor.beatAt(t));
+    const active = this.chart.prompts.filter((p) => ct >= p.time && ct < p.endTime);
     const p = active[active.length - 1];
     if (!p) return;
     const { ctx } = this;
-    const fade = Math.min(1, (t - p.time) / 0.25, (p.endTime - t) / 0.35);
+    const fade = Math.min(1, (ct - p.time) / 0.25, (p.endTime - ct) / 0.35);
     const color = p.action ? ACTION_SPECS[p.action].color : PALETTE.white;
     ctx.font = 'bold 20px monospace';
     const textW = ctx.measureText(p.text).width;

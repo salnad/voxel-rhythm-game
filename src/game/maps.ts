@@ -1,4 +1,4 @@
-import { renderDemoSong } from '../audio/demo/render';
+import { mixStems, renderDemoStems } from '../audio/demo/render';
 import { buildChart, type Chart } from '../chart/build';
 import type { ChartFile } from '../chart/types';
 import { parseChartText, validateChart } from '../chart/validate';
@@ -12,7 +12,8 @@ export interface MapIndexEntry {
 
 export interface LoadedMap {
   chart: Chart;
-  audio: AudioBuffer;
+  /** Music stems by part name. Audio-file maps have a single "mix" stem. */
+  stems: Record<string, AudioBuffer>;
   warnings: string[];
 }
 
@@ -25,14 +26,19 @@ export class MapLoadError extends Error {
   }
 }
 
-const proceduralCache = new Map<string, Promise<AudioBuffer>>();
+const proceduralCache = new Map<string, Promise<Record<string, AudioBuffer>>>();
 
-/** Built-in procedural songs, by `audio.procedural` name. */
-const PROCEDURAL: Record<string, () => Promise<AudioBuffer>> = {
-  'hyperpop-demo': () => renderDemoSong(),
+/** Built-in procedural songs, by `audio.procedural` name. They render to stems. */
+const PROCEDURAL: Record<string, () => Promise<Record<string, AudioBuffer>>> = {
+  'digicore-demo': () => renderDemoStems(),
 };
 
-export function proceduralSong(name: string): Promise<AudioBuffer> {
+/** A procedural song mixed down to one buffer (editor preview). */
+export async function proceduralMix(name: string): Promise<AudioBuffer> {
+  return mixStems(await proceduralSong(name));
+}
+
+export function proceduralSong(name: string): Promise<Record<string, AudioBuffer>> {
   const make = PROCEDURAL[name];
   if (!make)
     throw new MapLoadError(
@@ -70,10 +76,11 @@ async function audioFor(
   file: ChartFile,
   fetchRelative?: (path: string) => Promise<ArrayBuffer>,
   provided?: ArrayBuffer,
-) {
+): Promise<Record<string, AudioBuffer>> {
   if (file.audio.procedural) return proceduralSong(file.audio.procedural);
-  if (provided) return decode(ctx, provided.slice(0));
-  if (fetchRelative && file.audio.file) return decode(ctx, await fetchRelative(file.audio.file));
+  if (provided) return { mix: await decode(ctx, provided.slice(0)) };
+  if (fetchRelative && file.audio.file)
+    return { mix: await decode(ctx, await fetchRelative(file.audio.file)) };
   throw new MapLoadError(
     `This chart needs its audio file "${file.audio.file}". Pick it alongside the chart.`,
   );
@@ -89,12 +96,12 @@ export async function loadBuiltinMap(
   const res = await fetch(base + chartFile);
   if (!res.ok) throw new MapLoadError(`Could not load ${base + chartFile} (${res.status})`);
   const { file, warnings } = checked(await res.text());
-  const audio = await audioFor(ctx, file, async (p) => {
+  const stems = await audioFor(ctx, file, async (p) => {
     const r = await fetch(base + p);
     if (!r.ok) throw new MapLoadError(`Could not load audio ${base + p} (${r.status})`);
     return r.arrayBuffer();
   });
-  return { chart: buildChart(file), audio, warnings };
+  return { chart: buildChart(file), stems, warnings };
 }
 
 /** Load a user-supplied chart (+ audio file unless procedural). */
@@ -104,8 +111,8 @@ export async function loadCustomMap(
   audioData?: ArrayBuffer,
 ): Promise<LoadedMap> {
   const { file, warnings } = checked(chartText);
-  const audio = await audioFor(ctx, file, undefined, audioData);
-  return { chart: buildChart(file), audio, warnings };
+  const stems = await audioFor(ctx, file, undefined, audioData);
+  return { chart: buildChart(file), stems, warnings };
 }
 
 export function chartFromValidated(file: ChartFile): Chart {
