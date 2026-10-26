@@ -88,7 +88,7 @@ export const ENEMIES: Record<EnemyKind, EnemySpec> = {
     damageMultiplier: 0.9,
   },
   brute: {
-    scale: 1.4,
+    scale: 1.25,
     accent: '#ff3b5c',
     body: '#26090f',
     weapon: 'club',
@@ -96,7 +96,7 @@ export const ENEMIES: Record<EnemyKind, EnemySpec> = {
     damageMultiplier: 1.4,
   },
   knight: {
-    scale: 1.25,
+    scale: 1.15,
     accent: '#d8e0ea',
     body: '#1a1d24',
     weapon: 'halberd',
