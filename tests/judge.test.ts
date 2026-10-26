@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import type { Note } from '../src/chart/types';
+import { ACTIONS, type Note } from '../src/chart/types';
 import { JUDGEMENT_WINDOWS as W } from '../src/config/gameplay';
 import { Judge } from '../src/rhythm/judge';
 
 const tap = (id: number, lane: number, time: number): Note => ({
   id,
   lane,
-  laneName: `l${lane}`,
+  action: ACTIONS[lane % 4]!,
+  encounter: 0,
   beat: time,
   time,
   endBeat: null,

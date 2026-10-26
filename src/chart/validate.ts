@@ -1,16 +1,21 @@
 import {
+  ACTIONS,
   CHART_FORMAT_ID,
   CHART_FORMAT_VERSION,
+  ENEMY_KINDS,
+  type Action,
+  type BpmChange,
+  type ChartEncounter,
   type ChartFile,
   type ChartNote,
-  type BpmChange,
+  type ChartPrompt,
+  type EnemyKind,
 } from './types';
 
-export const LANE_NAME_PATTERN = /^[a-z][a-z0-9_-]{0,23}$/;
-export const MIN_LANES = 1;
-export const MAX_LANES = 8;
-/** Two notes in one lane closer than this (in beats) are treated as duplicates. */
-const DUPLICATE_EPSILON_BEATS = 1 / 96;
+/** Two notes closer than this (in beats) count as simultaneous. */
+const SAME_BEAT_EPSILON = 1 / 96;
+/** An enemy needs this many beats between walking in and its first cue. */
+export const MIN_WALK_IN_BEATS = 1;
 
 export type ValidationResult =
   | { ok: true; chart: ChartFile; warnings: string[] }
@@ -22,10 +27,14 @@ const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !
 const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 const describe = (v: unknown): string =>
   v === undefined ? 'missing' : `${JSON.stringify(v)} (${Array.isArray(v) ? 'array' : typeof v})`;
+const isAction = (v: unknown): v is Action => ACTIONS.includes(v as Action);
+const isEnemy = (v: unknown): v is EnemyKind => ENEMY_KINDS.includes(v as EnemyKind);
+const ACTION_LIST = ACTIONS.join(', ');
+const ENEMY_LIST = ENEMY_KINDS.join(', ');
 
 /**
  * Validate an already-parsed JSON value as a chart. Errors name the exact path
- * (e.g. `notes[12].lane`) and say what was expected, so an LLM can fix them.
+ * (e.g. `notes[12].action`) and say what was expected, so an LLM can fix them.
  * Notes are returned sorted by beat; unsorted input is only a warning.
  */
 export function validateChart(input: unknown): ValidationResult {
@@ -48,18 +57,28 @@ export function validateChart(input: unknown): ValidationResult {
     'meta',
     'audio',
     'timing',
-    'lanes',
+    'encounters',
+    'prompts',
     'notes',
   ]);
   for (const k of Object.keys(input)) {
-    if (!known.has(k)) warnings.push(`${k}: unknown top-level field is ignored`);
+    if (k === 'lanes') {
+      err(
+        'lanes',
+        `was removed in version 2. Every chart has the same four action lanes [${ACTION_LIST}]; give each note an "action" instead`,
+      );
+    } else if (!known.has(k)) warnings.push(`${k}: unknown top-level field is ignored`);
   }
 
   if (input.format !== CHART_FORMAT_ID) {
     err('format', `must be "${CHART_FORMAT_ID}", got ${describe(input.format)}`);
   }
   if (input.version !== CHART_FORMAT_VERSION) {
-    err('version', `must be ${CHART_FORMAT_VERSION}, got ${describe(input.version)}`);
+    err(
+      'version',
+      `must be ${CHART_FORMAT_VERSION}, got ${describe(input.version)}` +
+        (input.version === 1 ? ' (version 1 used song-element lanes; see docs/map-format.md)' : ''),
+    );
   }
 
   // meta
@@ -153,48 +172,24 @@ export function validateChart(input: unknown): ValidationResult {
     }
   }
 
-  // lanes
-  const lanes = input.lanes;
-  const laneSet = new Set<string>();
-  if (!Array.isArray(lanes)) {
-    err(
-      'lanes',
-      `must be an array of lane names like ["kick", "perc", "bass", "synth"], got ${describe(lanes)}`,
-    );
-  } else {
-    if (lanes.length < MIN_LANES || lanes.length > MAX_LANES) {
-      err('lanes', `must have ${MIN_LANES}-${MAX_LANES} lanes, got ${lanes.length}`);
-    }
-    lanes.forEach((l: unknown, i) => {
-      if (typeof l !== 'string' || !LANE_NAME_PATTERN.test(l)) {
-        err(
-          `lanes[${i}]`,
-          `must be a lowercase name (letters, digits, - or _; starts with a letter), got ${describe(l)}`,
-        );
-      } else if (laneSet.has(l)) {
-        err(`lanes[${i}]`, `duplicate lane name "${l}"`);
-      } else {
-        laneSet.add(l);
-      }
-    });
-  }
-
   // notes
   const notes = input.notes;
   const outNotes: ChartNote[] = [];
+  const srcIndex = new Map<ChartNote, number>();
   if (!Array.isArray(notes)) {
-    err('notes', `must be an array of {"beat": number, "lane": string}, got ${describe(notes)}`);
+    err('notes', `must be an array of {"beat": number, "action": string}, got ${describe(notes)}`);
   } else {
     if (notes.length === 0) warnings.push('notes: chart has no notes');
-    const laneList = [...laneSet].join(', ');
     let prevBeat = -Infinity;
     let unsorted = false;
     notes.forEach((n: unknown, i) => {
       const p = `notes[${i}]`;
       if (!isObj(n))
-        return err(p, `must be an object like {"beat": 4, "lane": "kick"}, got ${describe(n)}`);
+        return err(p, `must be an object like {"beat": 4, "action": "block"}, got ${describe(n)}`);
       for (const k of Object.keys(n)) {
-        if (k !== 'beat' && k !== 'lane' && k !== 'length') {
+        if (k === 'lane') {
+          err(`${p}.lane`, `was removed in version 2; use "action": one of [${ACTION_LIST}]`);
+        } else if (k !== 'beat' && k !== 'action' && k !== 'length') {
           warnings.push(`${p}.${k}: unknown note field is ignored`);
         }
       }
@@ -206,8 +201,8 @@ export function validateChart(input: unknown): ValidationResult {
         );
         ok = false;
       }
-      if (typeof n.lane !== 'string' || !laneSet.has(n.lane)) {
-        err(`${p}.lane`, `${describe(n.lane)} is not one of the lanes [${laneList}]`);
+      if (!isAction(n.action)) {
+        err(`${p}.action`, `${describe(n.action)} is not one of [${ACTION_LIST}]`);
         ok = false;
       }
       if (n.length !== undefined && (!isNum(n.length) || n.length < 0)) {
@@ -218,33 +213,39 @@ export function validateChart(input: unknown): ValidationResult {
         ok = false;
       }
       if (!ok) return;
-      const note: ChartNote = { beat: n.beat as number, lane: n.lane as string };
+      const note: ChartNote = { beat: n.beat as number, action: n.action as Action };
       if (isNum(n.length) && n.length > 0) note.length = n.length;
       if (note.beat < prevBeat) unsorted = true;
       prevBeat = note.beat;
       outNotes.push(note);
+      srcIndex.set(note, i);
     });
     if (unsorted) warnings.push('notes: not sorted by beat (they were sorted automatically)');
 
-    // overlap checks per lane, on sorted notes
-    const indexed = outNotes.map((n, idx) => ({ n, idx }));
-    indexed.sort((a, b) => a.n.beat - b.n.beat);
-    const lastByLane = new Map<string, { beat: number; end: number }>();
-    for (const { n } of indexed) {
-      const prev = lastByLane.get(n.lane);
+    // One action at a time: no two notes on the same beat, nothing during a hold.
+    outNotes.sort(
+      (a, b) => a.beat - b.beat || ACTIONS.indexOf(a.action) - ACTIONS.indexOf(b.action),
+    );
+    let prev: ChartNote | null = null;
+    for (const n of outNotes) {
       if (prev) {
-        if (Math.abs(n.beat - prev.beat) < DUPLICATE_EPSILON_BEATS) {
-          err('notes', `duplicate note in lane "${n.lane}" at beat ${n.beat}`);
-        } else if (n.beat < prev.end - 1e-9) {
+        const pi = srcIndex.get(prev)!;
+        const ni = srcIndex.get(n)!;
+        const prevEnd = prev.beat + (prev.length ?? 0);
+        if (Math.abs(n.beat - prev.beat) < SAME_BEAT_EPSILON) {
           err(
-            'notes',
-            `note in lane "${n.lane}" at beat ${n.beat} starts inside the hold that runs from beat ${prev.beat} to ${prev.end}`,
+            `notes[${ni}]`,
+            `is at beat ${n.beat}, the same beat as notes[${pi}] (${prev.action}). Only one action can happen at a time`,
+          );
+        } else if (n.beat < prevEnd - 1e-9) {
+          err(
+            `notes[${ni}]`,
+            `starts at beat ${n.beat}, inside the ${prev.action} hold notes[${pi}] that runs from beat ${prev.beat} to ${prevEnd}`,
           );
         }
       }
-      lastByLane.set(n.lane, { beat: n.beat, end: n.beat + (n.length ?? 0) });
+      prev = n;
     }
-    outNotes.sort((a, b) => a.beat - b.beat || a.lane.localeCompare(b.lane));
 
     if (isObj(audio) && isNum(audio.lengthBeats)) {
       const last = outNotes.reduce((m, n) => Math.max(m, n.beat + (n.length ?? 0)), 0);
@@ -253,6 +254,125 @@ export function validateChart(input: unknown): ValidationResult {
           `notes: last note ends at beat ${last}, after audio.lengthBeats (${audio.lengthBeats})`,
         );
       }
+    }
+  }
+
+  // encounters
+  let outEncounters: ChartEncounter[] | undefined;
+  const encounters = input.encounters;
+  if (encounters !== undefined) {
+    if (!Array.isArray(encounters)) {
+      err(
+        'encounters',
+        `must be an array like [{"beat": 0, "enemy": "grunt"}], got ${describe(encounters)}`,
+      );
+    } else {
+      outEncounters = [];
+      let last = -Infinity;
+      encounters.forEach((e: unknown, i) => {
+        const p = `encounters[${i}]`;
+        if (!isObj(e)) return err(p, `must be an object like {"beat": 0}, got ${describe(e)}`);
+        for (const k of Object.keys(e)) {
+          if (k !== 'beat' && k !== 'enemy' && k !== 'name')
+            warnings.push(`${p}.${k}: unknown encounter field is ignored`);
+        }
+        let ok = true;
+        if (!isNum(e.beat) || e.beat < 0) {
+          err(`${p}.beat`, `must be a number >= 0, got ${describe(e.beat)}`);
+          ok = false;
+        } else if (e.beat <= last) {
+          err(`${p}.beat`, `must be greater than the previous encounter's beat (${last})`);
+          ok = false;
+        }
+        if (e.enemy !== undefined && !isEnemy(e.enemy)) {
+          err(`${p}.enemy`, `${describe(e.enemy)} is not one of [${ENEMY_LIST}]`);
+          ok = false;
+        }
+        if (e.name !== undefined && typeof e.name !== 'string') {
+          err(`${p}.name`, `must be a string if present, got ${describe(e.name)}`);
+          ok = false;
+        }
+        if (!ok) return;
+        last = e.beat as number;
+        const enc: ChartEncounter = { beat: e.beat as number };
+        if (e.enemy !== undefined) enc.enemy = e.enemy as EnemyKind;
+        if (e.name !== undefined) enc.name = e.name as string;
+        outEncounters!.push(enc);
+      });
+      if (encounters.length === 0) err('encounters', 'must have at least one encounter if present');
+      if (outEncounters.length > 0 && outNotes.length > 0) {
+        const first = outNotes[0]!;
+        if (first.beat < outEncounters[0]!.beat) {
+          err(
+            'encounters[0].beat',
+            `is ${outEncounters[0]!.beat}, after the first note (beat ${first.beat}). Every note needs an enemy: start the first encounter at or before it`,
+          );
+        }
+        outEncounters.forEach((enc, i) => {
+          const end = outEncounters![i + 1]?.beat ?? Infinity;
+          const inside = outNotes.filter((n) => n.beat >= enc.beat && n.beat < end);
+          if (inside.length === 0) {
+            err(
+              `encounters[${i}]`,
+              `starting at beat ${enc.beat} has no notes before the next encounter. Remove it or give it notes`,
+            );
+            return;
+          }
+          const gap = inside[0]!.beat - enc.beat;
+          if (i > 0 && gap < MIN_WALK_IN_BEATS) {
+            warnings.push(
+              `encounters[${i}]: first note is ${gap} beats after the enemy walks in (beat ${enc.beat}); leave at least ${MIN_WALK_IN_BEATS}`,
+            );
+          }
+          const lastNote = inside[inside.length - 1]!;
+          if (lastNote.action !== 'flourish') {
+            warnings.push(
+              `encounters[${i}]: ends on a ${lastNote.action} at beat ${lastNote.beat}. End each enemy on a flourish (the finisher)`,
+            );
+          }
+        });
+      }
+    }
+  }
+
+  // prompts
+  let outPrompts: ChartPrompt[] | undefined;
+  const prompts = input.prompts;
+  if (prompts !== undefined) {
+    if (!Array.isArray(prompts)) {
+      err(
+        'prompts',
+        `must be an array like [{"beat": 0, "text": "BLOCK the attack"}], got ${describe(prompts)}`,
+      );
+    } else {
+      outPrompts = [];
+      prompts.forEach((pr: unknown, i) => {
+        const p = `prompts[${i}]`;
+        if (!isObj(pr))
+          return err(p, `must be an object like {"beat": 0, "text": "..."}, got ${describe(pr)}`);
+        let ok = true;
+        if (!isNum(pr.beat) || pr.beat < 0) {
+          err(`${p}.beat`, `must be a number >= 0, got ${describe(pr.beat)}`);
+          ok = false;
+        }
+        if (typeof pr.text !== 'string' || pr.text.trim() === '') {
+          err(`${p}.text`, `must be a non-empty string, got ${describe(pr.text)}`);
+          ok = false;
+        }
+        if (pr.action !== undefined && !isAction(pr.action)) {
+          err(`${p}.action`, `${describe(pr.action)} is not one of [${ACTION_LIST}]`);
+          ok = false;
+        }
+        if (pr.beats !== undefined && (!isNum(pr.beats) || pr.beats <= 0)) {
+          err(`${p}.beats`, `must be a positive number if present, got ${describe(pr.beats)}`);
+          ok = false;
+        }
+        if (!ok) return;
+        const out: ChartPrompt = { beat: pr.beat as number, text: pr.text as string };
+        if (pr.action !== undefined) out.action = pr.action as Action;
+        if (pr.beats !== undefined) out.beats = pr.beats as number;
+        outPrompts!.push(out);
+      });
     }
   }
 
@@ -270,7 +390,8 @@ export function validateChart(input: unknown): ValidationResult {
       ...(t.beatsPerBar !== undefined ? { beatsPerBar: t.beatsPerBar as number } : {}),
       ...(t.bpmChanges !== undefined ? { bpmChanges: t.bpmChanges as BpmChange[] } : {}),
     },
-    lanes: lanes as string[],
+    ...(outEncounters ? { encounters: outEncounters } : {}),
+    ...(outPrompts ? { prompts: outPrompts } : {}),
     notes: outNotes,
   };
   return { ok: true, chart, warnings };

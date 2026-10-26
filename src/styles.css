@@ -33,19 +33,10 @@ body {
 #stage {
   position: absolute;
   inset: 0;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-}
-#left,
-#right {
-  position: relative;
   overflow: hidden;
 }
-#left {
-  border-right: 1px solid rgba(57, 255, 106, 0.35);
-}
-#combat,
-#highway {
+#arena,
+#hud {
   position: absolute;
   inset: 0;
   width: 100%;
@@ -121,7 +112,7 @@ body {
 .synth-panel {
   position: absolute;
   left: 12px;
-  bottom: 12px;
+  bottom: 100px;
   width: 290px;
   padding: 8px 10px;
   background: rgba(0, 12, 4, 0.82);
@@ -373,4 +364,29 @@ input[type='range'] {
   96% {
     transform: translate(-3px, 1px);
   }
+}
+
+/* ---- menu extras */
+.screen .lanes-help {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin: 12px 0 4px;
+}
+.screen .lanes-help .lane {
+  border: 1px solid currentColor;
+  padding: 6px 8px;
+  font-size: 12px;
+  line-height: 1.4;
+}
+.screen .lanes-help .lane b {
+  display: block;
+  font-size: 15px;
+  letter-spacing: 2px;
+}
+.screen select {
+  background: #000;
+  color: var(--g);
+  border: 1px solid var(--g-mid);
+  font: inherit;
 }

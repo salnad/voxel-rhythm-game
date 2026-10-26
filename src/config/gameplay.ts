@@ -49,23 +49,24 @@ export const PLAYER = {
   maxHp: 100,
   /** HP restored per judgement. */
   heal: { perfect: 1.5, great: 0.75, good: 0, miss: 0 } as Record<Judgement, number>,
-  /** HP lost when an enemy gets through, before modifiers. */
-  missDamage: 7,
+  /** HP lost to a missed block, before the enemy's damage multiplier. */
+  missDamage: 8,
   /** Seconds of invulnerability flashing after a hit (visual only for now). */
   hurtFlash: 0.35,
 };
 
-/** Combat field geometry, in world units. Enemies are 1:1 with notes. */
-export const FIELD = {
-  /** Distance from the player at which an enemy is struck when its note is judged. */
-  strikeRadius: 2.1,
-  /** World units per second enemies move toward the player. */
-  approachSpeed: 8.5,
-  /** Enemies appear when farther than this would be needed (they fade in). */
-  spawnDistance: 26,
-  /** Lane tracks fan out over this angle (degrees) around the player's facing direction. */
-  laneFanDegrees: 64,
+/** Duel timing. The enemy's telegraph for a cue builds up over the last `telegraphLead` s. */
+export const DUEL = {
+  /** Longest wind-up before a cue (s). Shorter when cues are closer together. */
+  telegraphLead: 0.7,
+  /** Time after a cue that its outcome animation owns the enemy (s). */
+  resolveTime: 0.14,
+  /** Beats an enemy takes to walk in at the start of its encounter. */
+  walkInBeats: 1,
 };
+
+/** Seconds a cue takes to travel the highway at note speed 1.0. */
+export const APPROACH_SECONDS = 1.6;
 
 export const AUTOPLAY = {
   /** Std-dev of autoplay timing error, seconds. */

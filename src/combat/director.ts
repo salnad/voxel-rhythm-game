@@ -1,49 +1,50 @@
-import { laneStyle, type AttackKind } from '../config/combat';
-import type { Judgement, JudgementEvent } from '../rhythm/judge';
+import type { Action, Note } from '../chart/types';
+import type { Judgement, JudgementEvent, JudgementKind } from '../rhythm/judge';
 import type { AttackModifiers } from '../synth/modifiers';
 
-/** A combat action derived from a judgement, already carrying synth modifiers. */
-export interface AttackAction {
+/** A judged cue turned into a sword action, already carrying the synth modifiers. */
+export interface DuelAction {
   noteId: number;
   lane: number;
-  attack: AttackKind;
+  action: Action;
+  encounter: number;
+  kind: JudgementKind;
   judgement: Judgement;
-  /** True for a hold head: the enemy is pinned and ground down until release. */
-  grind: boolean;
+  hit: boolean;
+  /** True for a hold head: the hero holds the move (blade lock, grind) until release. */
+  hold: boolean;
+  /** True when this resolves the encounter's last cue. */
+  final: boolean;
   crit: boolean;
   time: number;
   mods: AttackModifiers;
 }
 
-export type DirectorOutput =
-  | { type: 'attack'; action: AttackAction }
-  | { type: 'letThrough'; noteId: number; lane: number; time: number };
-
 /**
- * Judgement → combat. This is the seam where future systems (weapons, synth-driven
- * attack patterns) plug in: they transform or add AttackActions here.
+ * Judgement → duel action. This is the seam where future systems (weapons, synth-driven
+ * patterns) plug in: they transform or add actions here.
  */
-export function directJudgement(
+export function resolveJudgement(
   e: JudgementEvent,
-  laneNames: readonly string[],
+  note: Note,
+  lastNoteOfEncounter: boolean,
   mods: AttackModifiers,
-): DirectorOutput {
-  if (e.judgement === 'miss') {
-    return { type: 'letThrough', noteId: e.noteId, lane: e.lane, time: e.time };
-  }
-  const style = laneStyle(laneNames[e.lane] ?? '', e.lane);
-  const attack: AttackKind = e.kind === 'holdEnd' ? 'finisher' : style.attack;
+): DuelAction {
+  const hit = e.judgement !== 'miss';
+  const offensive = note.action !== 'block';
   return {
-    type: 'attack',
-    action: {
-      noteId: e.noteId,
-      lane: e.lane,
-      attack,
-      judgement: e.judgement,
-      grind: e.kind === 'holdStart',
-      crit: e.judgement === 'perfect' && mods.critMultiplier > 1.15,
-      time: e.time,
-      mods,
-    },
+    noteId: e.noteId,
+    lane: e.lane,
+    action: note.action,
+    encounter: note.encounter,
+    kind: e.kind,
+    judgement: e.judgement,
+    hit,
+    hold: hit && e.kind === 'holdStart',
+    // A hold is only resolved by its release (or by a missed head).
+    final: lastNoteOfEncounter && (e.kind !== 'holdStart' || !hit),
+    crit: hit && offensive && e.judgement === 'perfect' && mods.critMultiplier > 1.15,
+    time: e.time,
+    mods,
   };
 }

@@ -5,8 +5,14 @@ export const TABLE_SHAPES = ['sine', 'triangle', 'saw', 'square'] as const;
 export type TableShape = (typeof TABLE_SHAPES)[number];
 
 /**
- * Everything the synth contributes to an attack. Pure data derived from the patch;
- * combat uses the gameplay fields, the renderer uses the visual ones.
+ * Everything the synth contributes to the sword. Pure data derived from the patch;
+ * the duel uses the gameplay fields, the renderer uses the visual ones.
+ *
+ *  - WT POS  → SLASH / FLOURISH arc shape and width, STAB thrust curve, trail colour
+ *  - UNISON  → echo blades on every move (a fanned shield on BLOCK) + ECHO PARRY charges
+ *  - DETUNE  → echo spread and timing
+ *  - CUTOFF  → blade reach and glow, STAB lunge distance
+ *  - RES     → crit score bonus on PERFECT slashes, stabs and flourishes
  */
 export interface AttackModifiers {
   /** Morph weights over TABLE_SHAPES (sum to 1, at most two non-zero). */
@@ -16,16 +22,18 @@ export interface AttackModifiers {
   /** Trail hue (degrees) and whether the trail is stepped/glitchy. */
   trailHue: number;
   trailStepped: number;
-  /** Extra ghost slashes after the main swing. */
+  /** Extra ghost blades after the main move. */
   echoCount: number;
   /** Delay between echoes (s) and angular spread (radians). */
   echoDelay: number;
   echoSpread: number;
-  /** Echo-parry charge gained per landed hit (1 charge cancels one enemy that gets through). */
+  /** Echo-parry charge gained per landed hit (1 charge absorbs one missed block). */
   parryChargePerHit: number;
   /** Blade length multiplier. */
   reach: number;
-  /** Score multiplier applied to PERFECT hits. */
+  /** STAB lunge distance multiplier. */
+  stabLunge: number;
+  /** Score multiplier applied to PERFECT offensive hits. */
   critMultiplier: number;
 }
 
@@ -75,6 +83,7 @@ export function deriveModifiers(patch: SynthPatch): AttackModifiers {
     echoSpread: patch.detune * 0.35,
     parryChargePerHit: echoCount * 0.02 * (0.5 + patch.detune),
     reach: 0.8 + patch.cutoff * 0.6,
+    stabLunge: 0.7 + patch.cutoff * 0.6,
     critMultiplier: 1 + patch.resonance * 0.5,
   };
 }

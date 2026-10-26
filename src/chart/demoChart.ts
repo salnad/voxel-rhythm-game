@@ -1,34 +1,72 @@
-import { composeDemo, DEMO_BPM, DEMO_LANES, DEMO_LENGTH_BEATS } from '../audio/demo/composition';
-import { CHART_FORMAT_ID, CHART_FORMAT_VERSION, type ChartFile, type ChartNote } from './types';
+import { composeDemo, DEMO_BPM, DEMO_LENGTH_BEATS } from '../audio/demo/composition';
+import {
+  ACTIONS,
+  CHART_FORMAT_ID,
+  CHART_FORMAT_VERSION,
+  type ChartEncounter,
+  type ChartFile,
+  type ChartNote,
+  type ChartPrompt,
+} from './types';
 
 export type DemoDifficulty = 'normal' | 'easy';
 
-/** Build the demo chart from the composition. Written to public/maps/demo by `npm run gen:demo`. */
+/**
+ * One enemy per musical phrase. Each walks in a beat after the previous one's finisher
+ * (the crash on the downbeat), so the next fight starts on the beat.
+ */
+const ENCOUNTERS: ChartEncounter[] = [
+  { beat: 0, enemy: 'grunt', name: 'TRAINING GRUNT' },
+  { beat: 65, enemy: 'grunt', name: 'GRUNT' },
+  { beat: 81, enemy: 'duelist', name: 'DUELIST' },
+  { beat: 97, enemy: 'grunt', name: 'GRUNT' },
+  { beat: 113, enemy: 'brute', name: 'BRUTE' },
+  { beat: 129, enemy: 'duelist', name: 'DUELIST' },
+  { beat: 145, enemy: 'knight', name: 'KNIGHT' },
+  { beat: 161, enemy: 'knight', name: 'BLADE KNIGHT' },
+  { beat: 193, enemy: 'grunt', name: 'GRUNT' },
+  { beat: 209, enemy: 'duelist', name: 'DUELIST' },
+  { beat: 225, enemy: 'brute', name: 'BRUTE' },
+  { beat: 241, enemy: 'brute', name: 'DAEMON' },
+];
+
+/** Each new action gets a prompt a few beats before its first cue. */
+const PROMPTS: ChartPrompt[] = [
+  {
+    beat: 0,
+    action: 'block',
+    text: 'When the enemy winds up, BLOCK on the kick',
+    beats: 10,
+  },
+  { beat: 18, action: 'slash', text: 'When it opens its guard, SLASH on the clap', beats: 10 },
+  { beat: 40, action: 'stab', text: 'Its weak point glows: STAB it on the tick', beats: 8 },
+  {
+    beat: 56,
+    action: 'flourish',
+    text: 'It staggers: FLOURISH on the crash to finish it',
+    beats: 9,
+  },
+  {
+    beat: 66,
+    text: 'Listen: kick = BLOCK · clap = SLASH · tick = STAB · crash = FLOURISH',
+    beats: 12,
+  },
+  { beat: 161, text: 'Blade lock: HOLD block until the bar ends', action: 'block', beats: 6 },
+];
+
+/** Build a demo chart from the composition. Written to public/maps/demo by `npm run gen:demo`. */
 export function buildDemoChart(difficulty: DemoDifficulty = 'normal'): ChartFile {
   const notes: ChartNote[] = [];
   for (const e of composeDemo()) {
     if (!e.chart) continue;
-    if (difficulty === 'easy') {
-      // Whole beats only, kick and synth on even beats, claps only.
-      if (e.beat % 1 !== 0) continue;
-      if (e.chart.lane === 'perc' && (e.inst !== 'clap' || e.vel < 1)) continue;
-      if ((e.chart.lane === 'kick' || e.chart.lane === 'synth') && e.beat % 2 !== 0) continue;
-    }
-    const n: ChartNote = { beat: e.beat, lane: e.chart.lane };
-    if (e.chart.length) n.length = e.chart.length;
+    if (difficulty === 'easy' && !e.chart.easy) continue;
+    const n: ChartNote = { beat: e.beat, action: e.chart.action };
+    if (e.chart.length && difficulty === 'normal') n.length = e.chart.length;
     notes.push(n);
   }
-  // Drop duplicates (same lane & beat) that the composition can produce.
-  const seen = new Set<string>();
-  const unique = notes.filter((n) => {
-    const k = `${n.lane}@${n.beat}`;
-    if (seen.has(k)) return false;
-    seen.add(k);
-    return true;
-  });
-  unique.sort(
-    (a, b) =>
-      a.beat - b.beat || DEMO_LANES.indexOf(a.lane as never) - DEMO_LANES.indexOf(b.lane as never),
+  notes.sort((a, b) => a.beat - b.beat || ACTIONS.indexOf(a.action) - ACTIONS.indexOf(b.action));
+  const prompts = PROMPTS.filter(
+    (p) => difficulty === 'normal' || !p.text.startsWith('Blade lock'),
   );
   return {
     format: CHART_FORMAT_ID,
@@ -38,21 +76,26 @@ export function buildDemoChart(difficulty: DemoDifficulty = 'normal'): ChartFile
       artist: 'procedural (Web Audio)',
       charter: 'voxel-rhythm demo generator',
       difficulty,
-      description: 'Hyperpop demo loop generated in the browser. Lanes follow the instruments.',
+      description:
+        'Hyperpop duel generated in the browser. Kick = block, clap = slash, rim tick = stab, crash = flourish.',
     },
     audio: { procedural: 'hyperpop-demo', lengthBeats: DEMO_LENGTH_BEATS },
     timing: { bpm: DEMO_BPM, offsetMs: 0, beatsPerBar: 4 },
-    lanes: [...DEMO_LANES],
-    notes: unique,
+    encounters: ENCOUNTERS.map((e) => ({ ...e })),
+    prompts: prompts.map((p) => ({ ...p })),
+    notes,
   };
 }
 
-/** Compact, diff-friendly JSON: one note per line. */
+/** Compact, diff-friendly JSON: one note, encounter or prompt per line. */
 export function formatChartJson(chart: ChartFile, schemaRef?: string): string {
-  const { notes, ...rest } = chart;
+  const { notes, encounters, prompts, ...rest } = chart;
+  const line = (o: object) =>
+    '    ' + JSON.stringify(o).replace(/,"/g, ', "').replace(/":/g, '": ');
   const head = JSON.stringify(schemaRef ? { $schema: schemaRef, ...rest } : rest, null, 2);
-  const noteLines = notes.map(
-    (n) => '    ' + JSON.stringify(n).replace(/,"/g, ', "').replace(/":/g, '": '),
-  );
-  return `${head.slice(0, -2)},\n  "notes": [\n${noteLines.join(',\n')}\n  ]\n}\n`;
+  const parts = [head.slice(0, -2)];
+  if (encounters) parts.push(`  "encounters": [\n${encounters.map(line).join(',\n')}\n  ]`);
+  if (prompts) parts.push(`  "prompts": [\n${prompts.map(line).join(',\n')}\n  ]`);
+  parts.push(`  "notes": [\n${notes.map(line).join(',\n')}\n  ]`);
+  return `${parts.join(',\n')}\n}\n`;
 }

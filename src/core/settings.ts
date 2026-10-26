@@ -2,11 +2,11 @@
 export interface Settings {
   /** Audio offset in ms. Positive if you hit late / hear audio late. */
   audioOffsetMs: number;
-  /** Shifts the highway drawing only. Positive draws notes earlier (for laggy displays). */
+  /** Shifts the cue drawing only. Positive draws cues earlier (for laggy displays). */
   visualOffsetMs: number;
-  /** Highway scroll speed in screen-heights per second. */
+  /** Cue speed multiplier. 1.0 = cues take APPROACH_SECONDS to travel the highway. */
   scrollSpeed: number;
-  /** Key codes (KeyboardEvent.code) per lane, for 4-lane charts. Other lane counts use defaults. */
+  /** Key codes (KeyboardEvent.code) for BLOCK, SLASH, STAB, FLOURISH. */
   keys4: string[];
   musicVolume: number;
   hitsoundVolume: number;
@@ -14,39 +14,49 @@ export interface Settings {
   difficulty: 'normal' | 'easy';
 }
 
+/** Key presets offered in Settings. The first is the default. */
+export const KEY_PRESETS: ReadonlyArray<{ name: string; keys: readonly string[] }> = [
+  { name: 'F G H J', keys: ['KeyF', 'KeyG', 'KeyH', 'KeyJ'] },
+  { name: 'A S D F', keys: ['KeyA', 'KeyS', 'KeyD', 'KeyF'] },
+  { name: 'ARROWS', keys: ['ArrowLeft', 'ArrowDown', 'ArrowUp', 'ArrowRight'] },
+  { name: 'D F J K', keys: ['KeyD', 'KeyF', 'KeyJ', 'KeyK'] },
+];
+
 export const DEFAULT_SETTINGS: Settings = {
   audioOffsetMs: 0,
   visualOffsetMs: 0,
-  scrollSpeed: 1.1,
-  keys4: ['KeyD', 'KeyF', 'KeyJ', 'KeyK'],
+  scrollSpeed: 1,
+  keys4: [...KEY_PRESETS[0]!.keys],
   musicVolume: 0.8,
-  hitsoundVolume: 0.25,
+  hitsoundVolume: 0.35,
   noFail: true,
-  difficulty: 'normal',
+  difficulty: 'easy',
 };
 
-const KEY = 'voxel-rhythm.settings.v1';
+const KEY = 'voxel-rhythm.settings.v2';
 
-export const DEFAULT_KEYS: Record<number, string[]> = {
-  1: ['Space'],
-  2: ['KeyF', 'KeyJ'],
-  3: ['KeyF', 'Space', 'KeyJ'],
-  5: ['KeyD', 'KeyF', 'Space', 'KeyJ', 'KeyK'],
-  6: ['KeyS', 'KeyD', 'KeyF', 'KeyJ', 'KeyK', 'KeyL'],
-  7: ['KeyS', 'KeyD', 'KeyF', 'Space', 'KeyJ', 'KeyK', 'KeyL'],
-  8: ['KeyA', 'KeyS', 'KeyD', 'KeyF', 'KeyJ', 'KeyK', 'KeyL', 'Semicolon'],
-};
-
-export function keysForLaneCount(settings: Settings, n: number): string[] {
-  if (n === 4) return settings.keys4;
-  return DEFAULT_KEYS[n] ?? settings.keys4.slice(0, n);
+/** Short label for a KeyboardEvent.code, for HUD and menus. */
+export function keyLabel(code: string): string {
+  if (code.startsWith('Key')) return code.slice(3);
+  if (code.startsWith('Digit')) return code.slice(5);
+  const named: Record<string, string> = {
+    Space: '␣',
+    Semicolon: ';',
+    ArrowLeft: '←',
+    ArrowRight: '→',
+    ArrowUp: '↑',
+    ArrowDown: '↓',
+  };
+  return named[code] ?? code;
 }
 
 export function loadSettings(): Settings {
   try {
     const raw = localStorage.getItem(KEY);
     if (!raw) return { ...DEFAULT_SETTINGS };
-    return { ...DEFAULT_SETTINGS, ...(JSON.parse(raw) as Partial<Settings>) };
+    const s = { ...DEFAULT_SETTINGS, ...(JSON.parse(raw) as Partial<Settings>) };
+    if (!Array.isArray(s.keys4) || s.keys4.length !== 4) s.keys4 = [...DEFAULT_SETTINGS.keys4];
+    return s;
   } catch {
     return { ...DEFAULT_SETTINGS };
   }

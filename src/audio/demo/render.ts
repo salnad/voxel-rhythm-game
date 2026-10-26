@@ -94,6 +94,8 @@ export async function renderDemoSong(sampleRate = 44100, solo?: DemoBus): Promis
   const busOf: Record<CompEvent['inst'], Bus> = {
     kick: 'kick',
     clap: 'perc',
+    rim: 'perc',
+    impact: 'perc',
     hat: 'perc',
     riser: 'perc',
     bass: 'bass',
@@ -145,6 +147,8 @@ function voiceKey(e: CompEvent): string {
   switch (e.inst) {
     case 'kick':
     case 'clap':
+    case 'rim':
+    case 'impact':
     case 'hat':
       return e.inst;
     default:
@@ -154,7 +158,7 @@ function voiceKey(e: CompEvent): string {
 
 async function renderVoice(e: CompEvent, spb: number, sampleRate: number): Promise<AudioBuffer> {
   const len = e.len * spb;
-  const tail = e.inst === 'pad' ? 1 : 0.4;
+  const tail = e.inst === 'pad' || e.inst === 'impact' ? 1 : 0.4;
   const ctx = new OfflineAudioContext(2, Math.ceil((len + tail) * sampleRate), sampleRate);
   const out = ctx.destination;
   const noise = noiseBuffer(ctx, 2);
@@ -168,6 +172,12 @@ async function renderVoice(e: CompEvent, spb: number, sampleRate: number): Promi
       break;
     case 'hat':
       hat(ctx, out, noise, 0, 1);
+      break;
+    case 'rim':
+      rim(ctx, out, noise, 0, 1);
+      break;
+    case 'impact':
+      impact(ctx, out, noise, 0, len, 1);
       break;
     case 'bass':
       bass(ctx, out, 0, len, unit);
@@ -268,6 +278,61 @@ function hat(ctx: BaseAudioContext, bus: AudioNode, noise: AudioBuffer, t: numbe
   const g = env(ctx, t, 0.45 * vel, 0.001, 0.005, 0.035);
   n.connect(hp).connect(g).connect(bus);
   n.start(t, 0.9, 0.06);
+}
+
+/** Metallic rim tick: the STAB sound. */
+function rim(ctx: BaseAudioContext, bus: AudioNode, noise: AudioBuffer, t: number, vel: number) {
+  for (const [f, a] of [
+    [1870, 0.5],
+    [2790, 0.3],
+    [4120, 0.18],
+  ] as const) {
+    const o = ctx.createOscillator();
+    o.type = 'triangle';
+    o.frequency.setValueAtTime(f, t);
+    const g = env(ctx, t, a * vel, 0.001, 0.004, 0.07);
+    o.connect(g).connect(bus);
+    o.start(t);
+    o.stop(t + 0.1);
+  }
+  const n = ctx.createBufferSource();
+  n.buffer = noise;
+  const bp = ctx.createBiquadFilter();
+  bp.type = 'bandpass';
+  bp.frequency.value = 5200;
+  bp.Q.value = 2;
+  const ng = env(ctx, t, 0.6 * vel, 0.001, 0.002, 0.018);
+  n.connect(bp).connect(ng).connect(bus);
+  n.start(t, 0.7, 0.03);
+}
+
+/** Crash + sub boom: the FLOURISH sound. */
+function impact(
+  ctx: BaseAudioContext,
+  bus: AudioNode,
+  noise: AudioBuffer,
+  t: number,
+  len: number,
+  vel: number,
+) {
+  const n = ctx.createBufferSource();
+  n.buffer = noise;
+  n.loop = true;
+  const hp = ctx.createBiquadFilter();
+  hp.type = 'highpass';
+  hp.frequency.value = 4500;
+  const g = env(ctx, t, 0.5 * vel, 0.002, 0.02, Math.min(1.6, len));
+  n.connect(hp).connect(g).connect(bus);
+  n.start(t);
+  n.stop(t + len + 0.5);
+  const o = ctx.createOscillator();
+  o.type = 'sine';
+  o.frequency.setValueAtTime(110, t);
+  o.frequency.exponentialRampToValueAtTime(38, t + 0.5);
+  const og = env(ctx, t, 0.9 * vel, 0.003, 0.08, 0.7);
+  o.connect(og).connect(bus);
+  o.start(t);
+  o.stop(t + 1);
 }
 
 function bass(ctx: BaseAudioContext, bus: AudioNode, t: number, len: number, e: CompEvent) {

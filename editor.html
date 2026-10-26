@@ -22,7 +22,6 @@
           <label>title <input id="n-title" value="Untitled" /></label>
           <label>bpm <input id="n-bpm" type="number" value="140" step="0.01" /></label>
           <label>offset ms <input id="n-offset" type="number" value="0" /></label>
-          <label>lanes <input id="n-lanes" value="kick,perc,bass,synth" /></label>
           <button id="b-new">create (uses loaded audio)</button>
         </section>
         <section>
@@ -50,7 +49,9 @@
           <div id="pos"></div>
         </section>
         <section class="help">
+          lanes = block · slash · stab · flourish (one action at a time)<br />
           click empty cell: add tap · drag up: hold · click note: delete<br />
+          red lines = a new enemy walks in (edit "encounters" in the JSON)<br />
           wheel: scroll · ctrl+wheel: zoom · Space: play from cursor<br />
           Edit the JSON on the right (or paste an LLM's chart) and press APPLY.
         </section>

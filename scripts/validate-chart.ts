@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { encounterStarts } from '../src/chart/build';
 import { parseChartText } from '../src/chart/validate';
 
 const files = process.argv.slice(2);
@@ -11,7 +12,9 @@ for (const f of files) {
   const r = parseChartText(readFileSync(f, 'utf8'));
   for (const w of r.warnings) console.warn(`${f}: warning: ${w}`);
   if (r.ok) {
-    console.log(`${f}: OK (${r.chart.notes.length} notes, ${r.chart.lanes.length} lanes)`);
+    console.log(
+      `${f}: OK (${r.chart.notes.length} notes, ${encounterStarts(r.chart).length} enemies)`,
+    );
   } else {
     failed = true;
     for (const e of r.errors) console.error(`${f}: error: ${e}`);

@@ -4,8 +4,14 @@
     "title": "NEON//DAEMON",
     "artist": "procedural (Web Audio)",
     "charts": [
-      { "difficulty": "normal", "file": "chart.json" },
-      { "difficulty": "easy", "file": "chart-easy.json" }
+      {
+        "difficulty": "easy",
+        "file": "chart-easy.json"
+      },
+      {
+        "difficulty": "normal",
+        "file": "chart.json"
+      }
     ]
   }
 ]
