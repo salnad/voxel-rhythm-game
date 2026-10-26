@@ -124,6 +124,11 @@ keyboard / touch / autoplay
     or glitches it (lead, vocals: chopped, low-passed, crushed) until that action's next cue. The
     lead is synthesized live by your wavetable patch, so synth settings change how SLASH sounds.
   - **SWORD SFX**: moves make sword sounds and the song plays as written.
+  - **B · PRODUCER FX** (`?mapping=fx`, `audio/fx/`, tuning in `config/productionFx.ts`): each move is a mix-wide
+    effect, locked to the cue's beat. BLOCK pumps the mix like a sidechain, SLASH slams a resonant
+    low-pass shut and sweeps it open, STAB beat-repeats the 1/16 after the cue, FLOURISH pitch-rises
+    the whole mix (plus a noise riser) into the next bar line. A miss plays the effect fumbled: a
+    mushy double duck, a jammed honking filter, off-grid decaying repeats, a riser that stalls.
 - **Audio clock** (`audio/musicEngine.ts`, `core/clockSync.ts`). Game time is the timeline position
   the player is _hearing_: AudioContext time (via `getOutputTimestamp`, falling back to
   `currentTime - outputLatency`), smoothed against `performance.now()`, minus the user's audio offset.
