@@ -3,6 +3,7 @@
  * Settings lists them and the runner instantiates the chosen one. Add a mapping by writing
  * a MusicLayerFactory and registering it here.
  */
+import { instrumentLayer } from '../audio/instrumentLayer';
 import { swordSfxLayer, type MusicLayerFactory } from '../audio/musicLayers';
 
 export interface MusicMapping {
@@ -12,6 +13,12 @@ export interface MusicMapping {
 }
 
 export const MUSIC_MAPPINGS: Record<string, MusicMapping> = {
+  instruments: {
+    label: 'INSTRUMENTS',
+    description:
+      'Each move plays a part: block = 808, slash = lead (your synth patch), stab = hats/perc, flourish = vocal chops. A miss mutes or glitches that part.',
+    create: instrumentLayer,
+  },
   sword: {
     label: 'SWORD SFX',
     description: 'Moves make sword sounds; the song plays as written.',
@@ -19,7 +26,7 @@ export const MUSIC_MAPPINGS: Record<string, MusicMapping> = {
   },
 };
 
-export const DEFAULT_MUSIC_MAPPING = 'sword';
+export const DEFAULT_MUSIC_MAPPING = 'instruments';
 
 export function musicMapping(name: string): MusicMapping {
   return MUSIC_MAPPINGS[name] ?? MUSIC_MAPPINGS[DEFAULT_MUSIC_MAPPING]!;

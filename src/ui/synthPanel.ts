@@ -7,7 +7,7 @@ import {
   type SynthPatch,
 } from '../synth/patch';
 
-const KEY = 'voxel-rhythm.patch.v1';
+const KEY = 'voxel-rhythm.patch.v2';
 
 export function loadPatch(): SynthPatch {
   try {
@@ -49,7 +49,7 @@ export class SynthPanel {
     this.el = document.createElement('div');
     this.el.className = 'synth-panel';
     this.el.innerHTML = `
-      <div class="synth-head"><span>WAVETABLE // SWORD SYNTH</span><span class="hint">[Tab] expand/collapse</span></div>
+      <div class="synth-head"><span>WAVETABLE // SWORD + LEAD SYNTH</span><span class="hint">[Tab] expand/collapse</span></div>
       <canvas class="synth-wave" width="260" height="70"></canvas>
       <div class="synth-presets"></div>
       <div class="synth-params"></div>`;

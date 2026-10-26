@@ -93,6 +93,11 @@ export class MusicEngine {
     return this.started && this.pausedAt === null;
   }
 
+  /** Let live voices follow the engine's pitch effects (wobble, tape-stop). */
+  connectBend(param: AudioParam): void {
+    this.detune.connect(param);
+  }
+
   /** Context time (scheduling domain) at which game time t is heard. */
   ctxTimeFor(t: number): number {
     return this.anchor - this.outputLatency() + t;

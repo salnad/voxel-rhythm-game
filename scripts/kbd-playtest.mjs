@@ -100,7 +100,7 @@ while (now < until) {
   const wall = Date.now();
   const state = await ev(`(() => {
     const s = window.__vr.session, t = window.__vr.songTime();
-    const cues = s.cuesBetween(t, t + 1.2).map((c) => ({ id: c.id, lane: c.lane, t: c.time, end: c.endTime, beat: s.chart.notes[c.noteId].beat, bar: c.bar, attempt: c.attempt, pending: s.judge.isPending(c.id) }));
+    const cues = s.cuesBetween(t - 0.25, t + 1.2).map((c) => ({ id: c.id, lane: c.lane, t: c.time, end: c.endTime, beat: s.chart.notes[c.noteId].beat, bar: c.bar, attempt: c.attempt, pending: s.judge.isPending(c.id) }));
     return { t, cues, done: s.finished };
   })()`);
   now = state.t;
