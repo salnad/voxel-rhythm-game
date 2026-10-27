@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { Action, EnemyKind } from '../chart/types';
 import { ACTION_SPECS, ENEMIES } from '../config/actions';
-import { PALETTE } from '../config/visuals';
+import { ENEMY_REACT, PALETTE } from '../config/visuals';
 import { drawActionIcon } from './icons';
 
 export interface EnemyRig {
@@ -25,6 +25,7 @@ export interface EnemyRig {
   coreMat: THREE.MeshBasicMaterial;
 }
 
+const FLASH = new THREE.Color('#ffffff');
 const iconCache = new Map<Action, THREE.CanvasTexture>();
 function iconTexture(action: Action): THREE.CanvasTexture {
   let tex = iconCache.get(action);
@@ -331,6 +332,11 @@ function mix(a: PoseParams, b: Partial<PoseParams>, k: number): PoseParams {
 }
 
 const smooth = (x: number) => x * x * (3 - 2 * x);
+/** Ease out with a small overshoot (knockback that rocks past and settles). */
+const backOut = (x: number) => {
+  const c = ENEMY_REACT.overshoot;
+  return 1 + (c + 1) * (x - 1) ** 3 + c * (x - 1) ** 2;
+};
 
 /** Outcome animation for the last cue, starting from its full telegraph pose. */
 function outcomePose(
@@ -362,12 +368,20 @@ function outcomePose(
       { ...IDLE, armX: -1.3, offX: -0.9, offZ: 0.05, fwd: 0.18 },
       Math.min(1, age / 0.06),
     );
-  } else if (action === 'slash') {
-    p = mix(from, { twist: 0.55, fwd: -0.45, lean: 0.25, line: 0, armZ: -0.6, offZ: 0.6 }, k);
-  } else if (action === 'stab') {
-    p = mix(from, { lean: 0.45, fwd: -0.5, core: 0, crouch: -0.1 }, k);
   } else {
-    p = mix(from, { lean: 0.5, crouch: -0.35, fwd: -0.3, dizzy: 0 }, k);
+    // struck: freeze for the hit-stop (with a shudder), then knock back past the pose and settle
+    const struck = Math.max(0, age - ENEMY_REACT.hitStop);
+    const kb = backOut(Math.min(1, struck / ENEMY_REACT.knockback));
+    if (action === 'slash') {
+      p = mix(from, { twist: 0.6, fwd: -0.45, lean: 0.28, line: 0, armZ: -0.6, offZ: 0.6 }, kb);
+    } else if (action === 'stab') {
+      p = mix(from, { lean: 0.5, fwd: -0.55, core: 0, crouch: -0.12 }, kb);
+    } else {
+      p = mix(from, { lean: 0.55, crouch: -0.38, fwd: -0.35, twist: -0.3, dizzy: 0 }, kb);
+    }
+    if (age < ENEMY_REACT.hitStop) p.twist += Math.sin(t * 95) * ENEMY_REACT.shudder;
+    const rest = Math.min(1, Math.max(0, (struck - 0.1) / 0.28));
+    return mix(p, IDLE, smooth(rest));
   }
   return mix(p, IDLE, smooth(settle));
 }
@@ -436,6 +450,13 @@ export function poseEnemy(rig: EnemyRig, s: EnemyPoseInput): void {
   (rig.dizzy.material as THREE.MeshBasicMaterial).opacity = p.dizzy;
   rig.dizzy.rotation.z = s.t * 6;
   rig.weaponMat.emissive.set(ACTION_SPECS.block.color).multiplyScalar(p.glow * 1.4);
+  // white flash on a landed slash, stab or flourish
+  const struck =
+    s.last && s.last.outcome === 'hit' && s.last.action !== 'block' && s.last.age >= 0
+      ? Math.max(0, 1 - s.last.age / ENEMY_REACT.flashDecay)
+      : 0;
+  rig.bodyMat.emissive.set(ENEMIES[rig.kind].accent).lerp(FLASH, struck);
+  rig.bodyMat.emissiveIntensity = 0.08 + struck * ENEMY_REACT.flash;
   rig.eyeMat.color.set(p.eyes > 0.5 ? PALETTE.danger : PALETTE.white);
 
   // upcoming action icon above the head
