@@ -1,7 +1,9 @@
 import type { Chart } from '../chart/build';
 import { WONKY } from '../config/gameplay';
+import { MIX } from '../config/mix';
 import { ClockSync } from '../core/clockSync';
 import type { MeasurePlay } from '../game/conductor';
+import { masterBus } from './master';
 
 /** Seconds of scheduling headroom when starting playback. */
 const START_AHEAD = 0.1;
@@ -54,13 +56,15 @@ export class MusicEngine {
     private readonly stems: Record<string, AudioBuffer>,
   ) {
     this.output = ctx.createGain();
-    this.output.connect(ctx.destination);
+    this.output.connect(masterBus(ctx).input);
     const comp = ctx.createDynamicsCompressor();
-    comp.threshold.value = -12;
-    comp.ratio.value = 5;
-    comp.attack.value = 0.003;
-    comp.release.value = 0.15;
+    comp.threshold.value = MIX.glue.threshold;
+    comp.knee.value = MIX.glue.knee;
+    comp.ratio.value = MIX.glue.ratio;
+    comp.attack.value = MIX.glue.attack;
+    comp.release.value = MIX.glue.release;
     this.musicBus = ctx.createGain();
+    this.musicBus.gain.value = MIX.busGain;
     this.dry = ctx.createGain();
     this.crush = ctx.createGain();
     this.crush.gain.value = 0;

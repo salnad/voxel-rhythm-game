@@ -1,45 +1,85 @@
 import type { Action } from '../../chart/types';
-import { LIFT, PUMP, STUTTER } from '../../config/productionFx';
+import { LIFT, PUMP, STUTTER, SWEEP, type FxKind } from '../../config/productionFx';
+import type { Judgement } from '../../rhythm/judge';
 import type { MusicLayerFactory } from '../musicLayers';
 import { directFx, type FxCommand } from './director';
 import {
   clipShape,
+  joinTail,
   liftFumbleShapes,
   liftShapes,
+  pumpDelay,
   pumpFumbleShape,
   pumpHoldShape,
   pumpReleaseShape,
   pumpShape,
+  scaleDuck,
+  shifterSemis,
   stutterFumblePlan,
   stutterPlan,
+  SWEEP_ATTACK_END,
   sweepFumbleShapes,
   sweepShapes,
+  warpShape,
   type Shape,
   type StutterPlan,
 } from './plan';
+import { Trace, type FxMeter } from './trace';
 
 /** Shortest ramp into a new effect (s), so retriggers don't click. */
 const DECLICK = 0.004;
 /** Scheduling headroom past currentTime (s). */
 const HEADROOM = 0.003;
+/** Traces forget automation older than this (s). */
+const TRACE_KEEP = 4;
 
-/** Freeze a param at its current value from `at`, dropping later automation. */
-function hold(p: AudioParam, at: number): void {
-  if (typeof p.cancelAndHoldAtTime === 'function') {
-    p.cancelAndHoldAtTime(at);
-  } else {
-    p.cancelScheduledValues(at);
-    p.setValueAtTime(p.value, at);
+/** An AudioParam plus a Trace of everything scheduled on it. */
+class Auto {
+  readonly trace: Trace;
+
+  constructor(readonly param: AudioParam) {
+    this.trace = new Trace(param.value);
   }
-}
 
-/** Automate `p` along `shape` anchored at `anchor`, starting no earlier than `now`. */
-function play(p: AudioParam, shape: Shape, anchor: number, now: number): void {
-  hold(p, now);
-  const pts = clipShape(shape, anchor, now);
-  pts.forEach((pt, i) => {
-    p.linearRampToValueAtTime(pt.value, i === 0 ? Math.max(pt.time, now + DECLICK) : pt.time);
-  });
+  /** Freeze at the current value from `at`, dropping later automation. */
+  hold(at: number): void {
+    this.trace.prune(at - TRACE_KEEP);
+    const p = this.param;
+    if (typeof p.cancelAndHoldAtTime === 'function') {
+      p.cancelAndHoldAtTime(at);
+    } else {
+      p.cancelScheduledValues(at);
+      p.setValueAtTime(this.trace.valueAt(at), at);
+    }
+    this.trace.hold(at);
+  }
+
+  cancel(at: number): void {
+    this.param.cancelScheduledValues(at);
+    this.trace.cancel(at);
+  }
+
+  set(v: number, t: number): void {
+    this.param.setValueAtTime(v, t);
+    this.trace.set(v, t);
+  }
+
+  ramp(v: number, t: number): void {
+    this.param.linearRampToValueAtTime(v, t);
+    this.trace.ramp(v, t);
+  }
+
+  /** Follow `shape` anchored at `anchor`, starting no earlier than `now`. */
+  play(shape: Shape, anchor: number, now: number): void {
+    this.hold(now);
+    clipShape(shape, anchor, now).forEach((pt, i) => {
+      this.ramp(pt.value, i === 0 ? Math.max(pt.time, now + DECLICK) : pt.time);
+    });
+  }
+
+  at(t: number): number {
+    return this.trace.valueAt(t);
+  }
 }
 
 /**
@@ -54,7 +94,7 @@ class PitchShifter {
   readonly rate: AudioParam;
   private readonly sources: AudioScheduledSourceNode[] = [];
 
-  constructor(ctx: AudioContext, window: number) {
+  constructor(ctx: BaseAudioContext, window: number) {
     this.input = ctx.createGain();
     this.output = ctx.createGain();
     const rate = ctx.createConstantSource();
@@ -114,65 +154,108 @@ class PitchShifter {
   }
 }
 
+interface Trigger {
+  at: number;
+  judgement: Judgement;
+}
+
 /**
  * The effects chain, spliced between the song's stems and the engine's music bus:
  *
- *   stems → pump → low-pass → (dry | pitch shifter) → (dry | beat-repeat) → music bus
+ *   stems ─ pump ─┬─ low-pass → high-pass → (dry | pitch shifter) → (dry | beat-repeat) → gap → music bus
+ *   exempt ─ pump tail ─┘
  *
- * Pump-exempt stems (the demo's 808) join after the pump, so the kick drives the duck instead of
- * ducking under it. The noise riser goes straight to the music bus.
+ * Pump-exempt stems (the demo's 808) skip the main duck, so the kick drives it, and only their
+ * tail ducks (PUMP.exemptDepth). The noise riser goes straight to the music bus.
  */
 export class FxRack {
   readonly input: GainNode;
-  readonly postPump: GainNode;
+  readonly exempt: GainNode;
   readonly output: GainNode;
-  private readonly pump: GainNode;
-  private readonly lp: BiquadFilterNode;
-  private readonly liftDry: GainNode;
-  private readonly liftWet: GainNode;
+  private readonly pump: Auto;
+  private readonly exemptPump: Auto;
+  private readonly lpFreq: Auto;
+  private readonly lpQ: Auto;
+  private readonly hpFreq: Auto;
+  private readonly liftDry: Auto;
+  private readonly liftWet: Auto;
+  private readonly liftRate: Auto;
+  private readonly riser: Auto;
+  private readonly riserHz: Auto;
+  private readonly gap: Auto;
   private readonly shifter: PitchShifter;
-  private readonly stutDry: GainNode;
-  private readonly stutDelay: DelayNode;
-  private readonly stutTone: BiquadFilterNode;
-  private readonly stutGate: GainNode;
-  private readonly riser: GainNode;
-  private readonly riserBp: BiquadFilterNode;
+  private readonly stutDry: Auto;
+  private readonly stutDelay: AudioParam;
+  private readonly stutTone: Auto;
+  private readonly stutGate: Auto;
   private readonly noise: AudioBufferSourceNode;
   private stutterEnd = 0;
+  private stutters: Array<StutterPlan & { id: number; unit: number }> = [];
+  private nextStutter = 1;
+  private readonly last: Record<FxKind, Trigger | null> = {
+    pump: null,
+    sweep: null,
+    stutter: null,
+    lift: null,
+  };
 
   constructor(
-    private readonly ctx: AudioContext,
+    private readonly ctx: BaseAudioContext,
     riserOut: AudioNode,
   ) {
-    this.input = ctx.createGain();
-    this.pump = ctx.createGain();
-    this.postPump = ctx.createGain();
-    this.lp = ctx.createBiquadFilter();
-    this.lp.type = 'lowpass';
-    this.lp.frequency.value = 20000;
-    this.lp.Q.value = 0.7;
-    this.input.connect(this.pump).connect(this.postPump).connect(this.lp);
+    const gain = (v = 1) => {
+      const g = ctx.createGain();
+      g.gain.value = v;
+      return g;
+    };
+    this.input = gain();
+    this.exempt = gain();
+    const pump = gain();
+    const exemptPump = gain();
+    this.pump = new Auto(pump.gain);
+    this.exemptPump = new Auto(exemptPump.gain);
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = SWEEP.openHz;
+    lp.Q.value = 0.7;
+    this.lpFreq = new Auto(lp.frequency);
+    this.lpQ = new Auto(lp.Q);
+    const hp = ctx.createBiquadFilter();
+    hp.type = 'highpass';
+    hp.frequency.value = 20;
+    hp.Q.value = 0.9;
+    this.hpFreq = new Auto(hp.frequency);
+    this.input.connect(pump).connect(lp);
+    this.exempt.connect(exemptPump).connect(lp);
+    lp.connect(hp);
 
-    const mid = ctx.createGain();
-    this.liftDry = ctx.createGain();
-    this.liftWet = ctx.createGain();
-    this.liftWet.gain.value = 0;
+    const mid = gain();
+    const liftDry = gain();
+    const liftWet = gain(0);
+    this.liftDry = new Auto(liftDry.gain);
+    this.liftWet = new Auto(liftWet.gain);
     this.shifter = new PitchShifter(ctx, LIFT.windowSec);
-    this.lp.connect(this.liftDry).connect(mid);
-    this.lp.connect(this.shifter.input);
-    this.shifter.output.connect(this.liftWet).connect(mid);
+    this.liftRate = new Auto(this.shifter.rate);
+    hp.connect(liftDry).connect(mid);
+    hp.connect(this.shifter.input);
+    this.shifter.output.connect(liftWet).connect(mid);
 
-    this.output = ctx.createGain();
-    this.stutDry = ctx.createGain();
-    this.stutDelay = ctx.createDelay(2);
-    this.stutDelay.delayTime.value = 0;
-    this.stutTone = ctx.createBiquadFilter();
-    this.stutTone.type = 'lowpass';
-    this.stutTone.frequency.value = 20000;
-    this.stutGate = ctx.createGain();
-    this.stutGate.gain.value = 0;
-    mid.connect(this.stutDry).connect(this.output);
-    mid.connect(this.stutDelay).connect(this.stutTone).connect(this.stutGate).connect(this.output);
+    const gapNode = gain();
+    this.gap = new Auto(gapNode.gain);
+    this.output = gapNode;
+    const stutDry = gain();
+    this.stutDry = new Auto(stutDry.gain);
+    const stutDelay = ctx.createDelay(2);
+    stutDelay.delayTime.value = 0;
+    this.stutDelay = stutDelay.delayTime;
+    const stutTone = ctx.createBiquadFilter();
+    stutTone.type = 'lowpass';
+    stutTone.frequency.value = 20000;
+    this.stutTone = new Auto(stutTone.frequency);
+    const stutGate = gain(0);
+    this.stutGate = new Auto(stutGate.gain);
+    mid.connect(stutDry).connect(gapNode);
+    mid.connect(stutDelay).connect(stutTone).connect(stutGate).connect(gapNode);
 
     const buf = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
     const d = buf.getChannelData(0);
@@ -180,12 +263,13 @@ export class FxRack {
     this.noise = ctx.createBufferSource();
     this.noise.buffer = buf;
     this.noise.loop = true;
-    this.riserBp = ctx.createBiquadFilter();
-    this.riserBp.type = 'bandpass';
-    this.riserBp.Q.value = 2.5;
-    this.riser = ctx.createGain();
-    this.riser.gain.value = 0;
-    this.noise.connect(this.riserBp).connect(this.riser).connect(riserOut);
+    const riserBp = ctx.createBiquadFilter();
+    riserBp.type = 'bandpass';
+    riserBp.Q.value = 2.5;
+    this.riserHz = new Auto(riserBp.frequency);
+    const riser = gain(0);
+    this.riser = new Auto(riser.gain);
+    this.noise.connect(riserBp).connect(riser).connect(riserOut);
     this.noise.start();
   }
 
@@ -197,27 +281,35 @@ export class FxRack {
   run(c: FxCommand, toCtx: (t: number) => number): void {
     const now = this.now;
     if (c.type === 'release') {
-      if (c.fx === 'pump') play(this.pump.gain, pumpReleaseShape(c.beat, c.fumble), now, now);
+      if (c.fx === 'pump') {
+        const s = pumpReleaseShape(c.beat, c.fumble);
+        this.pump.play(s, now, now);
+        this.exemptPump.play(scaleDuck(s, PUMP.exemptDepth / PUMP.depth), now, now);
+      }
       return;
     }
     const anchor = toCtx(c.anchor);
+    const lag = now - anchor;
+    const tail = joinTail(c.beat);
+    this.last[c.fx] = { at: Math.max(now, anchor), judgement: c.judgement };
     switch (c.fx) {
-      case 'pump':
-        play(
-          this.pump.gain,
-          c.fumble
-            ? pumpFumbleShape(c.beat)
-            : c.sustain
-              ? pumpHoldShape(c.amount)
-              : pumpShape(c.amount, c.beat),
-          anchor,
-          now,
-        );
+      case 'pump': {
+        const delay = pumpDelay(lag);
+        const base = c.fumble
+          ? pumpFumbleShape(c.beat)
+          : c.sustain
+            ? pumpHoldShape(c.amount, delay)
+            : pumpShape(c.amount, c.beat, delay);
+        const s = warpShape(base, lag, delay + PUMP.attack, tail);
+        this.pump.play(s, anchor, now);
+        this.exemptPump.play(scaleDuck(s, PUMP.exemptDepth / PUMP.depth), anchor, now);
         break;
+      }
       case 'sweep': {
         const s = c.fumble ? sweepFumbleShapes(c.beat) : sweepShapes(c.amount, c.beat);
-        play(this.lp.frequency, s.freq, anchor, now);
-        play(this.lp.Q, s.q, anchor, now);
+        const end = c.fumble ? 0.06 : SWEEP_ATTACK_END;
+        this.lpFreq.play(warpShape(s.freq, lag, end, tail), anchor, now);
+        this.lpQ.play(warpShape(s.q, lag, end, tail), anchor, now);
         break;
       }
       case 'stutter': {
@@ -225,48 +317,91 @@ export class FxRack {
           c.judgement === 'miss'
             ? stutterFumblePlan(now, c.beat)
             : stutterPlan(anchor, now, c.beat, c.judgement);
-        if (plan) this.stutter(plan, now);
+        if (plan) this.stutter(plan, now, STUTTER.sliceBeats * c.beat);
         break;
       }
       case 'lift': {
         const span = toCtx(c.target ?? c.anchor + 4 * c.beat) - anchor;
-        const s = c.fumble ? liftFumbleShapes(span) : liftShapes(c.amount, span);
-        play(this.shifter.rate, s.rate, anchor, now);
-        play(this.liftWet.gain, s.wet, anchor, now);
-        play(this.liftDry.gain, s.dry, anchor, now);
-        play(this.riser.gain, s.riser, anchor, now);
-        play(this.riserBp.frequency, s.riserHz, anchor, now);
+        const s = c.fumble ? liftFumbleShapes(span) : liftShapes(c.amount, span, c.beat);
+        this.liftRate.play(s.rate, anchor, now);
+        this.liftWet.play(s.wet, anchor, now);
+        this.liftDry.play(s.dry, anchor, now);
+        this.riser.play(s.riser, anchor, now);
+        this.riserHz.play(s.riserHz, anchor, now);
+        this.hpFreq.play(s.hp, anchor, now);
+        this.gap.play(s.gap, anchor, now);
         break;
       }
     }
   }
 
-  private stutter(plan: StutterPlan, now: number): void {
+  private stutter(plan: StutterPlan, now: number, unit: number): void {
     const first = plan.slices[0];
     if (!first) return;
     // a new stutter takes over from one still repeating
-    const gate = this.stutGate.gain;
-    const delay = this.stutDelay.delayTime;
-    hold(gate, now);
-    gate.linearRampToValueAtTime(0, now + DECLICK);
-    delay.cancelScheduledValues(now + DECLICK);
-    play(this.stutTone.frequency, plan.tone, first.start, now);
-    const dry = this.stutDry.gain;
-    hold(dry, now);
-    if (this.stutterEnd <= now) dry.setValueAtTime(1, Math.max(now, first.start - DECLICK));
-    dry.linearRampToValueAtTime(0, Math.max(now + DECLICK, first.start));
+    const gate = this.stutGate;
+    gate.hold(now);
+    gate.ramp(0, now + DECLICK);
+    this.stutDelay.cancelScheduledValues(now + DECLICK);
+    this.stutTone.play(plan.tone, first.start, now);
+    const dry = this.stutDry;
+    dry.hold(now);
+    if (this.stutterEnd <= now) dry.set(1, Math.max(now, first.start - DECLICK));
+    dry.ramp(0, Math.max(now + DECLICK, first.start));
     for (const s of plan.slices) {
       const open = Math.max(s.start, now + DECLICK);
-      delay.setValueAtTime(s.delay, open);
-      gate.setValueAtTime(0, open);
-      gate.linearRampToValueAtTime(s.gain, open + 0.002);
+      this.stutDelay.setValueAtTime(s.delay, open);
+      gate.set(0, open);
+      gate.ramp(s.gain, open + 0.002);
       const close = open + Math.max(0.006, s.len * STUTTER.duty);
-      gate.setValueAtTime(s.gain, close - 0.003);
-      gate.linearRampToValueAtTime(0, close);
+      gate.set(s.gain, close - 0.003);
+      gate.ramp(0, close);
     }
-    dry.setValueAtTime(0, plan.end - DECLICK);
-    dry.linearRampToValueAtTime(1, plan.end);
+    dry.set(0, plan.end - DECLICK);
+    dry.ramp(1, plan.end);
     this.stutterEnd = plan.end;
+    // a takeover cuts the previous stutter short
+    this.stutters = this.stutters
+      .filter((p) => p.end > now - TRACE_KEEP)
+      .map((p) => (p.end > now ? { ...p, end: now } : p));
+    this.stutters.push({ ...plan, id: this.nextStutter++, unit });
+  }
+
+  /** What the effects are doing at context time `t` (use the time the player hears). */
+  meter(t: number): FxMeter {
+    const duck = Math.max(0, Math.min(1, 1 - this.pump.at(t)));
+    const cutoffHz = this.lpFreq.at(t);
+    const closed = Math.max(
+      0,
+      Math.min(1, Math.log(SWEEP.openHz / cutoffHz) / Math.log(SWEEP.openHz / SWEEP.lowHz)),
+    );
+    const repeat: FxMeter['repeat'] = { id: 0, slice: -1, of: 0, open: false, beats: 0 };
+    const plan = [...this.stutters].reverse().find((p) => p.slices[0]!.start <= t && t < p.end);
+    if (plan) {
+      const i = plan.slices.findIndex((s) => t >= s.start && t < s.start + s.len);
+      const s = plan.slices[i];
+      repeat.id = plan.id;
+      repeat.slice = i;
+      repeat.of = plan.slices.length;
+      repeat.open = !!s && t < s.start + Math.max(0.006, s.len * STUTTER.duty);
+      repeat.beats = s ? (STUTTER.sliceBeats * s.len) / plan.unit : 0;
+    }
+    const wet = this.liftWet.at(t);
+    const semis = wet > 0.05 ? shifterSemis(this.liftRate.at(t), LIFT.windowSec) : 0;
+    const age = (k: FxKind) => {
+      const l = this.last[k];
+      return l && t >= l.at ? { age: t - l.at, judgement: l.judgement } : null;
+    };
+    return {
+      duck,
+      cutoffHz,
+      closed,
+      repeat,
+      semis,
+      lift: Math.max(0, Math.min(1, semis / LIFT.semis)),
+      gap: this.gap.at(t) < 0.5,
+      last: { pump: age('pump'), sweep: age('sweep'), stutter: age('stutter'), lift: age('lift') },
+    };
   }
 
   dispose(): void {
@@ -277,7 +412,7 @@ export class FxRack {
       /* already stopped */
     }
     this.output.disconnect();
-    this.riser.disconnect();
+    this.riser.param.value = 0;
   }
 }
 
@@ -285,14 +420,15 @@ export class FxRack {
  * PRODUCER FX: each move is a mix-wide production effect on the song. BLOCK pumps the mix
  * like a sidechain, SLASH sweeps a resonant filter open, STAB beat-repeats the 1/16 after
  * the cue, FLOURISH pitch-rises the whole mix into the next bar line. Hits lock the effect
- * to the cue's beat; misses play it fumbled (mushy pump, jammed filter, off-grid stutter,
- * a riser that stalls), on top of the engine's wonky measure for failed combos.
+ * to the cue's beat (the slam comes with the press); misses play it fumbled (mushy pump,
+ * jammed filter, off-grid stutter, a riser that stalls), on top of the engine's wonky measure
+ * for failed combos. `meter()` feeds the visuals and the FX RACK readout.
  */
 export const productionFxLayer: MusicLayerFactory = ({ ctx, engine, sfx, chart, session }) => {
   const rack = new FxRack(ctx, engine.musicBus);
   const routed: Array<[GainNode, AudioNode]> = [];
   for (const [name, part] of engine.parts) {
-    const dest = PUMP.exempt.includes(name) ? rack.postPump : rack.input;
+    const dest = PUMP.exempt.includes(name) ? rack.exempt : rack.input;
     part.disconnect(engine.musicBus);
     part.connect(dest);
     routed.push([part, dest]);
@@ -310,6 +446,7 @@ export const productionFxLayer: MusicLayerFactory = ({ ctx, engine, sfx, chart, 
     }),
   ];
   return {
+    meter: (t) => rack.meter(toCtx(t)),
     dispose: () => {
       off.forEach((f) => f());
       for (const [part, dest] of routed) {

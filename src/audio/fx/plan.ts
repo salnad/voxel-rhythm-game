@@ -3,7 +3,7 @@
  * (rack.ts) turns these into AudioParam automation. Shapes are keyframes relative to the
  * moment an effect is locked to (usually the cue's beat), linear in between.
  */
-import { LIFT, PUMP, STUTTER, SWEEP } from '../../config/productionFx';
+import { JOIN, LIFT, PUMP, STUTTER, SWEEP } from '../../config/productionFx';
 import type { Judgement } from '../../rhythm/judge';
 
 export interface Point {
@@ -16,9 +16,8 @@ export type Shape = ReadonlyArray<readonly [number, number]>;
 
 /**
  * Absolute automation points for `shape` anchored at `anchor`, for an effect that can only
- * start at `from` (a press is heard a little after its cue). Points before `from` are
- * dropped; if `from` falls inside the shape, its interpolated value at `from` comes first,
- * so a late start joins the effect mid-way instead of replaying its attack late.
+ * start at `from`. Points before `from` are dropped; if `from` falls inside the shape, its
+ * interpolated value at `from` comes first.
  */
 export function clipShape(shape: Shape, anchor: number, from: number): Point[] {
   const out: Point[] = [];
@@ -37,6 +36,40 @@ export function clipShape(shape: Shape, anchor: number, from: number): Point[] {
   return out;
 }
 
+/**
+ * A shape for an effect that starts `lag` after its anchor (the press is heard and handled
+ * after the cue). Keyframes up to `attackEnd` move to the press, so the slam comes with the
+ * key; the rest is squeezed so the shape still ends where it would have, on the grid. When
+ * that leaves less than `minTail`, the whole shape just plays late.
+ */
+export function warpShape(shape: Shape, lag: number, attackEnd: number, minTail: number): Shape {
+  if (lag <= 0 || shape.length === 0) return shape;
+  const end = shape[shape.length - 1]![0];
+  const start = attackEnd + lag;
+  if (end - start < minTail || end <= attackEnd) return shape.map(([t, v]) => [t + lag, v]);
+  const k = (end - start) / (end - attackEnd);
+  return shape.map(([t, v]) => [t <= attackEnd ? t + lag : start + (t - attackEnd) * k, v]);
+}
+
+/** Minimum tail for `warpShape`, in seconds. */
+export function joinTail(beat: number): number {
+  return JOIN.minTailBeats * beat;
+}
+
+/** Linear interpolation of a shape at offset `t` (held before the first and after the last). */
+export function shapeAt(shape: Shape, t: number): number {
+  if (shape.length === 0) return 0;
+  if (t <= shape[0]![0]) return shape[0]![1];
+  for (let i = 1; i < shape.length; i++) {
+    const [t1, v1] = shape[i]!;
+    if (t <= t1) {
+      const [t0, v0] = shape[i - 1]!;
+      return t1 === t0 ? v1 : v0 + ((v1 - v0) * (t - t0)) / (t1 - t0);
+    }
+  }
+  return shape[shape.length - 1]![1];
+}
+
 /** `n + 1` keyframes over [t0, t1] following f(p), p in 0..1. */
 function sampled(t0: number, t1: number, n: number, f: (p: number) => number): [number, number][] {
   return Array.from({ length: n + 1 }, (_, i) => {
@@ -50,25 +83,40 @@ function expHz(a: number, b: number, p: number): number {
   return a * Math.pow(b / a, p);
 }
 
+/** A gain shape with its gain reduction scaled by `k` (1 - (1 - v) × k). */
+export function scaleDuck(shape: Shape, k: number): Shape {
+  return shape.map(([t, v]) => [t, 1 - (1 - v) * k]);
+}
+
 // ── BLOCK: pump ──────────────────────────────────────────────────────────────
 
-export function pumpShape(amount: number, beat: number): Shape {
-  const floor = 1 - PUMP.depth * amount;
-  const a = PUMP.attackDelay;
-  const hold = a + PUMP.attack + 0.03;
-  const end = Math.max(hold + 0.05, PUMP.recoverBeats * beat);
+/**
+ * The pump's delay after the cue for an effect starting `lag` late: the kick transient it
+ * waits for has already gone by.
+ */
+export function pumpDelay(lag: number): number {
+  return Math.max(0, PUMP.attackDelay - Math.max(0, lag));
+}
+
+/** `delay`: the wait for the kick transient before the duck (see pumpDelay). */
+export function pumpShape(amount: number, beat: number, delay = PUMP.attackDelay): Shape {
+  const floor = Math.max(0.02, 1 - PUMP.depth * amount);
+  const a = delay;
+  const down = a + PUMP.attack;
+  const hold = down + PUMP.hold;
+  const end = Math.max(hold + 0.1, PUMP.recoverBeats * beat);
   return [
     [0, 1],
     [a, 1],
-    [a + PUMP.attack, floor],
+    [down, floor],
     [hold, floor],
-    ...sampled(hold, end, 8, (p) => 1 - (1 - floor) * Math.exp(-4 * p) * (1 - p)).slice(1),
+    ...sampled(hold, end, 12, (p) => floor + (1 - floor) * Math.pow(p, PUMP.curve)).slice(1),
   ];
 }
 
 /** Held block: duck and stay down until release. */
-export function pumpHoldShape(amount: number): Shape {
-  const a = PUMP.attackDelay;
+export function pumpHoldShape(amount: number, delay = PUMP.attackDelay): Shape {
+  const a = delay;
   return [
     [0, 1],
     [a, 1],
@@ -80,9 +128,9 @@ export function pumpHoldShape(amount: number): Shape {
 export function pumpReleaseShape(beat: number, fumble: boolean): Shape {
   if (!fumble) return [[0.5 * beat, 1]];
   return [
-    [0.05, 0.25],
+    [0.05, 0.2],
     [0.14, 0.85],
-    [0.22, 0.35],
+    [0.22, 0.3],
     [1.2 * beat, 1],
   ];
 }
@@ -91,11 +139,11 @@ export function pumpReleaseShape(beat: number, fumble: boolean): Shape {
 export function pumpFumbleShape(beat: number): Shape {
   return [
     [0, 1],
-    [0.045, 0.35],
+    [0.045, 0.3],
     [0.1, 0.8],
-    [0.15, 0.25],
+    [0.15, 0.2],
     [0.22, 0.55],
-    [0.3, 0.4],
+    [0.3, 0.35],
     [1.3 * beat, 1],
   ];
 }
@@ -107,18 +155,22 @@ export interface FilterShapes {
   q: Shape;
 }
 
+/** Where a sweep's slam ends. */
+export const SWEEP_ATTACK_END = 0.006;
+
 export function sweepShapes(amount: number, beat: number): FilterShapes {
   const low = SWEEP.lowHz * Math.pow(2, 1.6 * (1 - amount));
   const end = SWEEP.beats * beat;
+  const open = SWEEP_ATTACK_END + SWEEP.hold;
   return {
     freq: [
       [0, SWEEP.openHz],
-      [0.006, low],
-      ...sampled(0.02, end, 10, (p) => expHz(low, SWEEP.openHz, Math.pow(p, 1.5))),
+      [SWEEP_ATTACK_END, low],
+      ...sampled(open, end, 14, (p) => expHz(low, SWEEP.openHz, Math.pow(p, SWEEP.curve))),
     ],
     q: [
       [0, 0.7],
-      [0.006, SWEEP.q * (0.5 + 0.5 * amount)],
+      [SWEEP_ATTACK_END, SWEEP.q * (0.5 + 0.5 * amount)],
       [end * 0.7, SWEEP.q * 0.4],
       [end, 0.7],
     ],
@@ -141,8 +193,8 @@ export function sweepFumbleShapes(beat: number): FilterShapes {
     ],
     q: [
       [0, 0.7],
-      [0.06, 16],
-      [beat, 12],
+      [0.06, 18],
+      [beat, 14],
       [2.5 * beat, 0.7],
     ],
   };
@@ -160,7 +212,7 @@ export interface StutterSlice {
 
 export interface StutterPlan {
   slices: StutterSlice[];
-  /** Low-pass on the repeats (Hz). */
+  /** Low-pass on the repeats (Hz), relative to the first slice. */
   tone: Shape;
   /** Time the dry signal comes back. */
   end: number;
@@ -181,13 +233,21 @@ export function stutterPlan(
   const k0 = Math.max(1, Math.ceil((from - anchor) / unit - 1e-9));
   if (k0 > 3) return null;
   let t = anchor + k0 * unit;
+  const first = t;
   const slices: StutterSlice[] = [];
   for (const lenBeats of STUTTER.pattern[judgement]) {
     const len = lenBeats * beat;
     slices.push({ start: t, len, delay: t - anchor, gain: STUTTER.gain });
     t += len;
   }
-  return { slices, tone: [[0, 20000]], end: t };
+  return {
+    slices,
+    tone: [
+      [0, STUTTER.toneFrom],
+      [t - first, STUTTER.toneTo],
+    ],
+    end: t,
+  };
 }
 
 /** Missed stab: off-grid, too-short repeats of whatever just played, decaying and dulling. */
@@ -244,20 +304,37 @@ export interface LiftShapes {
   dry: Shape;
   riser: Shape;
   riserHz: Shape;
+  /** High-pass cutoff (Hz). */
+  hp: Shape;
+  /** Gain on the whole rack output: the gap before the bar line. */
+  gap: Shape;
 }
 
 /** Shapes relative to the cue; `span` is the time to the target bar line. */
-export function liftShapes(amount: number, span: number): LiftShapes {
+export function liftShapes(amount: number, span: number, beat: number): LiftShapes {
   const semis = LIFT.semis * (0.4 + 0.6 * amount);
   const w = LIFT.windowSec;
-  const snap = Math.min(0.006, span / 4);
-  const top = span - snap;
+  const gap = Math.min(LIFT.gapBeats * beat, span / 4);
+  const top = span - gap;
+  const x = 0.004;
   return {
     rate: [...sampled(0, top, 12, (p) => shifterRate(0.15 + semis * p * p, w)), [span, 0]],
-    wet: [...sampled(0, top, 6, (p) => LIFT.wet * Math.min(1, 0.2 + p)), [span, 0]],
-    dry: [...sampled(0, top, 6, (p) => 1 - 0.8 * p), [span, 1]],
-    riser: [...sampled(0, top, 8, (p) => LIFT.riserGain * amount * p * p * p), [span, 0]],
+    wet: [...sampled(0, top, 6, (p) => LIFT.wet * Math.min(1, 0.25 + p)), [span, 0]],
+    dry: [...sampled(0, top, 6, (p) => 1 - (1 - LIFT.dryFloor) * p), [span, 1]],
+    riser: [
+      ...sampled(0, top, 8, (p) => LIFT.riserGain * amount * p * p * p),
+      [top + x, 0],
+      [span, 0],
+    ],
     riserHz: sampled(0, top, 8, (p) => expHz(300, 9000, p)),
+    hp: [...sampled(0, top, 8, (p) => expHz(20, LIFT.hpHz * amount, p * p)), [span, 20]],
+    gap: [
+      [0, 1],
+      [top - x, 1],
+      [top, 0],
+      [span - x, 0],
+      [span, 1],
+    ],
   };
 }
 
@@ -273,14 +350,14 @@ export function liftFumbleShapes(span: number): LiftShapes {
     ],
     wet: [
       [0, 0.4],
-      [span * 0.35, 0.8],
-      [span * 0.65, 0.8],
+      [span * 0.35, 0.85],
+      [span * 0.65, 0.85],
       [span * 0.85, 0],
     ],
     dry: [
       [0, 0.8],
-      [span * 0.35, 0.3],
-      [span * 0.65, 0.3],
+      [span * 0.35, 0.25],
+      [span * 0.65, 0.25],
       [span * 0.85, 1],
     ],
     riser: [
@@ -293,5 +370,7 @@ export function liftFumbleShapes(span: number): LiftShapes {
       [span * 0.3, 1500],
       [span * 0.32, 400],
     ],
+    hp: [[0, 20]],
+    gap: [[0, 1]],
   };
 }

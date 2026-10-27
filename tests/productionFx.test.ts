@@ -88,8 +88,8 @@ describe('production FX stutter', () => {
     for (const s of plan.slices) {
       // every repeat replays audio from the cue
       expect(s.start - s.delay).toBeCloseTo(10);
-      // and starts on the 1/32 grid
-      const slots = (s.start - 10) / (unit / 2);
+      // and starts on the 1/64 grid
+      const slots = (s.start - 10) / (unit / 4);
       expect(slots).toBeCloseTo(Math.round(slots));
     }
     const total = STUTTER.pattern.perfect.reduce((a, b) => a + b, 0) * beat;
@@ -126,7 +126,7 @@ describe('production FX lift', () => {
 
   it('a hit rises to its full pitch right at the bar line, then snaps back', () => {
     const span = 1.6;
-    const s = liftShapes(1, span);
+    const s = liftShapes(1, span, 0.4);
     const peak = Math.max(...values(s.rate));
     expect(shifterSemis(peak, LIFT.windowSec)).toBeCloseTo(LIFT.semis + 0.15, 1);
     expect(last(s.rate)).toEqual([span, 0]);
@@ -135,7 +135,7 @@ describe('production FX lift', () => {
     // the rise accelerates into the bar line
     const mid = clipShape(s.rate, 0, span / 2)[0]!.value;
     expect(shifterSemis(mid, LIFT.windowSec)).toBeLessThan(LIFT.semis / 3);
-    const weaker = Math.max(...values(liftShapes(0.6, span).rate));
+    const weaker = Math.max(...values(liftShapes(0.6, span, 0.4).rate));
     expect(weaker).toBeLessThan(peak);
   });
 
