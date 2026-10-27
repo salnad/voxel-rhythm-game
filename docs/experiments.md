@@ -28,10 +28,11 @@ it 45-90 s.
    - `key` (permanent kebab-case), `label`, `tagline`, `hypothesis`, `inspiration`, and a 2-4 line
      `howTo` that teaches the mode in 10 seconds.
    - `options`: static switches. `highway: false` hides the floor lanes, `laneLabels: false` hides
-     the key boxes, `enemyIcon: false` hides the next-action icon, `windows` widens or narrows the
-     judgement windows, `musicMapping` forces a mapping, `approachSeconds` sets cue lead time,
-     `keys` overrides the lane keys, `altKeys` adds a second key per lane (e.g. arrows),
-     `keyLegend` labels them on the how-to card.
+     the key boxes, `enemyIcon: false` hides the next-action icon, `judgementHud: false` hides the
+     judgement text and combo counter beside the lanes (draw your own at the fight), `windows`
+     widens or narrows the judgement windows, `musicMapping` forces a mapping, `approachSeconds`
+     sets cue lead time, `keys` overrides the lane keys, `altKeys` adds a second key per lane (e.g.
+     arrows), `keyLegend` labels them on the how-to card.
    - `chart()`: return a `ChartFile` (default: the Lab chart).
    - `create(ctx)`: build the per-run runtime. `ctx` has the Three.js `scene` and `camera`, the
      `arena` (`enemyRig()`, `heroRig`, `toScreen()`, `highway`, `onBeforeRender()`), the `session`
@@ -65,3 +66,20 @@ Rules of thumb:
   documented here.
 - No DOM, canvas or WebGL work at module top level (the hub lists experiments in Node).
 - Dispose everything you add to the scene or audio graph.
+
+## Enemy-anchored cue kit
+
+`src/experiments/enemyCues/` holds what the lane-less presentations (`one-lane`, `one-lane-strip`,
+`converge`, `approach-ring`) share, and any experiment can reuse it:
+
+- `logic.ts` (pure, unit-tested in `tests/enemyCues.test.ts`): which cues to draw and in what stage
+  (`stageCues`: incoming, holding, hit, miss, voided, with ages for burst/crack animations), ghost
+  emphasis for the next cues, approach-ring / strip / converge-path timing maps, wrong-key
+  detection (a press right on another lane's cue), kick and hit-stop envelopes.
+- `stage.ts` (`EnemyCueStage`): bus wiring (outcomes, voided cues, key legend state), a swing sound
+  on every key press, a camera shot override (`DUEL_CLOSEUP`, applied after the arena poses its
+  camera, keeping its shake and FOV pulse), a camera punch and impact-frame flash on hits, world
+  spots on the enemy (`weapon`, `slash`, `core`, `chest`, `feet`) projected to the screen,
+  judgement pops and a combo counter at the fight.
+- `draw.ts`: cue badges (one shape + colour + icon per action, key chip, wrong-key shake), the
+  compact key legend that replaces the lane labels, impact lines and screen-space shards.

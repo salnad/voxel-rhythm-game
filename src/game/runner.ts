@@ -92,6 +92,7 @@ export class PlayRunner {
     this.hud = new HudOverlay(els.hudCanvas, chart, this.session, this.arena, keys, {
       laneLabels: xo.laneLabels ?? true,
       comboTags: xo.highway ?? true,
+      judgement: xo.judgementHud ?? true,
       prompts: xo.prompts ?? true,
     });
     this.approachBase = xo.approachSeconds ?? APPROACH_SECONDS;
