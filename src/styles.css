@@ -593,3 +593,128 @@ input[type='range'] {
   color: var(--g-mid);
   font-size: 11px;
 }
+
+/* ---- PRODUCER FX feedback (render/fxFeedback.ts) */
+#arena,
+.fx-freeze {
+  transform-origin: 50% 66%;
+}
+.fx-freeze,
+.fx-iris,
+.fx-flash {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  opacity: 0;
+}
+.fx-iris {
+  --r: 72%;
+  background: radial-gradient(
+    ellipse at 50% 62%,
+    rgba(0, 0, 0, 0) var(--r),
+    rgba(10, 60, 24, 0.55) calc(var(--r) + 6%),
+    rgba(0, 0, 0, 0.94) calc(var(--r) + 22%)
+  );
+}
+.fx-flash {
+  background: radial-gradient(
+    ellipse at 50% 55%,
+    #fff 0%,
+    rgba(255, 210, 59, 0.6) 45%,
+    rgba(0, 0, 0, 0) 80%
+  );
+  mix-blend-mode: screen;
+}
+.fx-rack {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  width: 210px;
+  padding: 6px 8px 8px;
+  background: rgba(0, 12, 4, 0.78);
+  border: 1px solid rgba(57, 255, 106, 0.45);
+  font-size: 11px;
+  letter-spacing: 1px;
+  pointer-events: none;
+}
+.fx-head {
+  color: var(--g-mid);
+  margin-bottom: 4px;
+}
+.fx-mod {
+  --c: var(--g);
+  display: grid;
+  grid-template-columns: 74px 1fr 58px;
+  grid-template-areas: 'name meter val' 'name leds grade';
+  align-items: center;
+  column-gap: 6px;
+  padding: 3px 4px;
+  margin-top: 2px;
+  color: var(--g-mid);
+  border-left: 2px solid var(--g-dim);
+  transition:
+    background 0.08s,
+    border-color 0.08s;
+}
+.fx-name {
+  grid-area: name;
+}
+.fx-name kbd {
+  display: inline-block;
+  min-width: 15px;
+  margin-right: 5px;
+  border: 1px solid currentColor;
+  text-align: center;
+  font-family: inherit;
+}
+.fx-meter {
+  grid-area: meter;
+  height: 6px;
+  border: 1px solid var(--g-dim);
+}
+.fx-fill {
+  height: 100%;
+  width: 0;
+  background: var(--c);
+  box-shadow: 0 0 6px var(--c);
+}
+.fx-leds {
+  grid-area: leds;
+  display: flex;
+  gap: 2px;
+  height: 5px;
+}
+.fx-leds i {
+  flex: 1;
+  border: 1px solid var(--c);
+  opacity: 0.5;
+}
+.fx-leds i.lit {
+  background: var(--c);
+  opacity: 1;
+}
+.fx-val {
+  grid-area: val;
+  text-align: right;
+}
+.fx-grade {
+  grid-area: grade;
+  text-align: right;
+  font-size: 10px;
+  color: var(--c);
+}
+.fx-mod.on {
+  color: var(--c);
+  border-left-color: var(--c);
+  background: rgba(255, 255, 255, 0.04);
+}
+.fx-mod.hit {
+  border-left-color: var(--c);
+  background: color-mix(in srgb, var(--c) 22%, transparent);
+  color: var(--w);
+}
+.fx-mod.fumble .fx-grade {
+  color: var(--red);
+}

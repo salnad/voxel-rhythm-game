@@ -1,6 +1,7 @@
 import type { Chart } from '../chart/build';
 import type { Action } from '../chart/types';
 import type { GameSession } from '../game/session';
+import type { FxMeter } from './fx/trace';
 import type { MusicEngine } from './musicEngine';
 import type { Sfx } from './sfx';
 
@@ -23,6 +24,8 @@ export interface MusicLayerDeps {
 export interface ActionMusicLayer {
   /** Called every frame with the game time. */
   update?(t: number): void;
+  /** Mix-wide effects state at game time `t`, for layers whose moves show on screen. */
+  meter?(t: number): FxMeter;
   dispose?(): void;
 }
 

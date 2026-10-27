@@ -1,3 +1,4 @@
+import { masterBus } from '../audio/master';
 import { MusicEngine } from '../audio/musicEngine';
 import type { ActionMusicLayer } from '../audio/musicLayers';
 import type { Sfx } from '../audio/sfx';
@@ -7,6 +8,7 @@ import { CAMERA } from '../config/visuals';
 import type { Settings } from '../core/settings';
 import type { Experiment, ExperimentRuntime } from '../experiments/types';
 import { ArenaView } from '../render/arenaView';
+import { FxFeedback } from '../render/fxFeedback';
 import { HudOverlay } from '../render/hudOverlay';
 import type { DigitalRain } from '../render/rain';
 import { AutoPlayer, KeyboardLanes, type LaneInput } from '../rhythm/input';
@@ -46,6 +48,7 @@ export class PlayRunner {
   private readonly hud: HudOverlay;
   private readonly keyboard: KeyboardLanes;
   private readonly layer: ActionMusicLayer;
+  private readonly fx: FxFeedback | null;
   private readonly auto: AutoPlayer | null;
   private readonly runtime: ExperimentRuntime;
   private readonly approachBase: number;
@@ -99,6 +102,8 @@ export class PlayRunner {
       chart,
       session: this.session,
     });
+    const stage = els.arenaCanvas.parentElement;
+    this.fx = this.layer.meter && stage ? new FxFeedback(stage, els.arenaCanvas, keys) : null;
 
     this.auto = opts.autoplay
       ? new AutoPlayer(
@@ -164,11 +169,12 @@ export class PlayRunner {
         session: this.session,
         experiment: this.opts.experiment?.key ?? null,
         camera: CAMERA,
+        /** What the mix-wide effects are doing now (PRODUCER FX), or undefined. */
+        fx: () => this.layer.meter?.(this.engine.timeAt(performance.now())),
         /** Everything the game plays, as a MediaStream (for recording demos without a sound card). */
         tapAudio: () => {
           const dest = this.engine.ctx.createMediaStreamDestination();
-          this.engine.output.connect(dest);
-          this.sfx.output.connect(dest);
+          masterBus(this.engine.ctx).output.connect(dest);
           return dest.stream;
         },
       };
@@ -210,6 +216,7 @@ export class PlayRunner {
     this.engine.stop();
     this.runtime.dispose?.();
     this.layer.dispose?.();
+    this.fx?.dispose();
     this.keyboard.dispose();
     this.arena.dispose();
     window.removeEventListener('resize', this.onResize);
@@ -243,6 +250,7 @@ export class PlayRunner {
     const drawT = t + this.settings.visualOffsetMs / 1000;
     const approach = this.approach();
     this.arena.update(drawT, this.engine.playing ? dt : 0, realDt, approach);
+    if (this.fx && this.layer.meter) this.fx.update(this.layer.meter(drawT), dt);
     this.hud.draw(drawT, approach);
     this.rain.update(dt);
     this.hooks.onFrame(this.session, t);

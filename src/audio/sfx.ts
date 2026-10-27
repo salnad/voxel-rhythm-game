@@ -1,4 +1,5 @@
 import type { Action } from '../chart/types';
+import { masterBus } from './master';
 
 /**
  * Small synthesized one-shots (move sounds, hits, hurt). Played live, or scheduled at explicit
@@ -10,7 +11,7 @@ export class Sfx {
 
   constructor(private readonly ctx: BaseAudioContext) {
     this.out = ctx.createGain();
-    this.out.connect(ctx.destination);
+    this.out.connect(masterBus(ctx).input);
   }
 
   /** Final output (for taps such as a recorder). */
