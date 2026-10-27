@@ -6,6 +6,7 @@
 import { approachRing } from './approachRing';
 import { baseline } from './baseline';
 import { converge } from './converge';
+import { freestyle } from './freestyle';
 import { onBeat } from './onBeat';
 import { oneLane, oneLaneStrip } from './oneLane';
 import { byEar } from './byEar';
@@ -31,6 +32,7 @@ export const EXPERIMENTS: readonly Experiment[] = [
   byEar,
   onBeat,
   twoButton,
+  freestyle,
 ];
 
 export function experimentByKey(key: string | null | undefined): Experiment | null {
