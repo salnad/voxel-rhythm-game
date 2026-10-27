@@ -98,7 +98,15 @@ export class OneShots {
       [8.93, 0.18, 0.3],
     ];
     for (const [ratio, g, l] of partials) {
-      this.tone(at, ratio > 5 ? 'sine' : 'triangle', f * ratio, f * ratio * 0.995, gain * g, len * l, pan);
+      this.tone(
+        at,
+        ratio > 5 ? 'sine' : 'triangle',
+        f * ratio,
+        f * ratio * 0.995,
+        gain * g,
+        len * l,
+        pan,
+      );
     }
     this.noiseBurst(at, 'highpass', 6000, 3000, gain * 0.9, 0.04, pan, 0.8);
   }

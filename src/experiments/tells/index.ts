@@ -17,8 +17,8 @@ import { tellAt, tellStarts, tellTelegraph, tellTiming, type TellState } from '.
  * and clear of the hero.
  */
 export const TELLS_CAMERA: CameraView = {
-  position: [3.4, 2.2, 6.2],
-  lookAt: [-0.4, 1.45, -2.8],
+  position: [4.9, 2.0, 5.1],
+  lookAt: [-0.8, 1.65, -3],
   fov: 30,
 };
 
@@ -127,7 +127,6 @@ function createTells(ctx: ExperimentContext): ExperimentRuntime {
   const timing = tellTiming(chart.tempo.bpmAtBeat(0));
   const shots = new OneShots(ctx.audio, ctx.sfx.output, 0.9);
   arena.view = { ...TELLS_CAMERA };
-  if (import.meta.env.DEV) (window as unknown as Record<string, unknown>).__arena = arena;
   arena.telegraph = (k, start, cues, t) => tellTelegraph(k, start, cues, t, timing);
 
   const tex = starTexture();
@@ -229,7 +228,9 @@ function createTells(ctx: ExperimentContext): ExperimentRuntime {
         const dx = miss > 0 ? Math.sin(t * 70) * 4 * miss : 0;
         c.fillStyle = held[i] ? hexA(spec.color, 0.3) : hexA('#000a04', 0.55 + 0.3 * hit);
         c.strokeStyle =
-          miss > 0.01 ? hexA(PALETTE.danger, 0.5 + 0.5 * miss) : hexA(spec.color, 0.35 + 0.65 * hit);
+          miss > 0.01
+            ? hexA(PALETTE.danger, 0.5 + 0.5 * miss)
+            : hexA(spec.color, 0.35 + 0.65 * hit);
         c.lineWidth = held[i] || hit > 0 || miss > 0 ? 2.5 : 1;
         c.beginPath();
         c.roundRect(x + dx, y, chipW, chipH, 7);
