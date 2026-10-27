@@ -55,6 +55,9 @@ it 45-90 s.
      - `arena.setHeroLean(yaw, pitch)`: turn / tilt the hero's whole body (0, 0 = rest).
      - `arena.hurtHero(t?)`: the hero's flinch and knockback (useful with `duelEffects = false`).
      - `arena.enemyRig(true)`: also return the rig while it's hidden (e.g. after defeat).
+     - `arena.setEnemyPoseFilter((pose, encounter) => pose)`: rewrite the front enemy's final pose
+       input each frame, after the telegraph (e.g. play poses for notes that aren't chart cues,
+       or hide the wind-ups); `null` clears it.
 2. Add it to `EXPERIMENTS` in `src/experiments/registry.ts`.
 3. `tests/experiments.test.ts` checks every registered experiment automatically (metadata, chart
    validity and length, an autoplay pass). Add unit tests for any pure logic you write.
@@ -84,16 +87,13 @@ Rules of thumb:
 - `draw.ts`: cue badges (one shape + colour + icon per action, key chip, wrong-key shake), the
   compact key legend that replaces the lane labels, impact lines and screen-space shards.
 
-## Optional core hooks
+## Optional audio hooks
 
-Small hooks experiments added to shared code. All are opt-in; the normal game never uses them.
+Opt-in hooks for experiments that build their own sound; the normal game never uses them.
 
 - `options.musicMapping: NO_MUSIC_LAYER` (`'none'`, `src/experiments/types.ts`): run without any
   mix-wide music layer, for experiments that drive the music themselves (keysound,
   call-and-response). The settings panel shows it as EXPERIMENT AUDIO.
-- `arena.setEnemyPoseFilter(fn | null)` (`src/render/arenaView.ts`): rewrite the pose input of the
-  front enemy each frame before `poseEnemy` (for example to play a pose the chart doesn't
-  schedule, or to hide the wind-up). Clear it in `dispose()`.
 - `CompEvent.cueBeat` (`src/audio/demo/composition.ts`): `composeSong` tags every note a charted
   cue sounds (808, cue lead notes, snares, roll hats, vocal chops and the crash) with the cue's
   beat. `withoutCues()` / `cueGroups()` (`src/audio/demo/keysounds.ts`) split a song into the
