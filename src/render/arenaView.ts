@@ -3,7 +3,7 @@ import type { Chart } from '../chart/build';
 import type { Action } from '../chart/types';
 import type { DuelAction } from '../combat/director';
 import type { DuelEvent } from '../combat/duel';
-import { telegraphAt } from '../combat/telegraph';
+import { telegraphAt, type Telegraph, type TelegraphCue } from '../combat/telegraph';
 import { ACTION_SPECS, ENEMIES } from '../config/actions';
 import { DUEL } from '../config/gameplay';
 import { HERO_ANIM } from '../config/heroAnimation';
@@ -27,6 +27,21 @@ export interface ArenaOptions {
   enemyIcon?: boolean;
 }
 const TOWARD_ENEMY = new THREE.Vector3(0, 0, -1);
+
+/** Which cue the enemy is winding up for at time t (see `telegraphAt`). */
+export type TelegraphFn = (
+  encounter: number | null,
+  encounterStart: number,
+  cues: readonly TelegraphCue[],
+  t: number,
+) => Telegraph;
+
+/** A camera placement replacing CAMERA's (shake and FOV kicks still apply on top). */
+export interface CameraView {
+  position: readonly [number, number, number];
+  lookAt: readonly [number, number, number];
+  fov?: number;
+}
 
 /**
  * The whole play view in one Three.js scene: hero, the enemy on stage, and the action
@@ -59,6 +74,20 @@ export class ArenaView {
   /** Seconds the visuals are drawn ahead of game time (Settings → visual offset). */
   visualOffset = 0;
   private cueScan = 0;
+  private stopFrom = -10;
+  private stopUntil = -10;
+  private heroYaw = 0;
+  private heroPitch = 0;
+
+  // ---- experiment hooks (all optional; the defaults are the normal game)
+  /** Replaces the enemy's telegraph timing (default: `telegraphAt` with DUEL's lead). */
+  telegraph: TelegraphFn | null = null;
+  /** Built-in hit/miss effects (world labels, debris, rings, shake, hurt flash). */
+  duelEffects = true;
+  /** Which hero move a press on `lane` plays (null: none). Default: the lane's action. */
+  pressMove: ((lane: number) => Action | null) | null = null;
+  /** Camera placement override. */
+  view: CameraView | null = null;
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
@@ -169,10 +198,39 @@ export class ArenaView {
   }
 
   /** The rig of the enemy on stage (walking in, fighting or exiting), or null. */
-  enemyRig(): EnemyRig | null {
+  enemyRig(includeHidden = false): EnemyRig | null {
     const k = this.session.duel.activeEncounter(this.now);
     const rig = k === null ? undefined : this.enemyRigs.get(k);
-    return rig && rig.root.visible ? rig : null;
+    return rig && (includeHidden || rig.root.visible) ? rig : null;
+  }
+
+  /** Play a hero move now (e.g. a finisher), as if it had connected. */
+  playHeroMove(action: Action, t = this.now): void {
+    this.anim.start(action, t, this.session.mods);
+    this.anim.connect(action, false);
+  }
+
+  /** Freeze the hero's and enemy's poses for `seconds` from `at` (impact hit-stop). */
+  hitStop(seconds: number, at = this.now): void {
+    this.stopFrom = at;
+    this.stopUntil = at + seconds;
+  }
+
+  /** Turn (yaw, + = toward screen left) and tilt (pitch, + = lean back) the hero's whole body. */
+  setHeroLean(yaw: number, pitch: number): void {
+    this.heroYaw = yaw;
+    this.heroPitch = pitch;
+  }
+
+  /** The hero's hit reaction (flinch + knockback), for experiments that turn off duelEffects. */
+  hurtHero(t = this.now): void {
+    this.hurtAt = t;
+    this.anim.hurt(t);
+  }
+
+  private moveFor(lane: number): Action | null {
+    if (this.pressMove) return this.pressMove(lane);
+    return (this.chart.lanes[lane] as Action | undefined) ?? null;
   }
 
   /** Screen point above the enemy on stage, or null. */
@@ -235,14 +293,14 @@ export class ArenaView {
   }
 
   private onInput(i: LaneInput): void {
-    const action = this.chart.lanes[i.lane] as Action | undefined;
-    if (!action) return;
+    if (!this.chart.lanes[i.lane]) return;
     this.held[i.lane] = i.down;
+    const move = this.moveFor(i.lane);
     // moves start at the input's own time, so the strike lands on the key press
     const at = i.time + this.visualOffset;
     if (i.down) {
       this.pressAt[i.lane] = this.now;
-      this.anim.start(action, at, this.session.mods);
+      if (move) this.anim.start(move, at, this.session.mods);
     } else {
       this.anim.release(at);
     }
@@ -252,8 +310,9 @@ export class ArenaView {
     if (!a.hit) return;
     if (a.kind !== 'holdEnd') {
       this.hitAt[a.lane] = this.now;
-      this.anim.connect(a.action, a.hold);
-      if (this.showHighway) {
+      const move = this.moveFor(a.lane);
+      if (move) this.anim.connect(move, a.hold);
+      if (this.showHighway && this.duelEffects) {
         const p = this.highway.receptorPoint(a.lane);
         this.rings.spawn(p.setY(0.06), ACTION_SPECS[a.action].color, UP, 0.22, 0.7);
       }
@@ -261,6 +320,7 @@ export class ArenaView {
   }
 
   private onDuel(d: DuelEvent): void {
+    if (!this.duelEffects) return;
     switch (d.type) {
       case 'enemyEnter':
         break;
@@ -365,8 +425,10 @@ export class ArenaView {
     const beat = this.session.conductor.beatAt(songTime);
     const phase = beat - Math.floor(beat);
     const bob = Math.pow(1 - phase, 3);
+    const poseT = songTime >= this.stopFrom && songTime < this.stopUntil ? this.stopFrom : songTime;
 
-    this.anim.update(songTime, mods, bob, this.anticipation(songTime));
+    this.hero.root.rotation.set(this.heroPitch, Math.PI / 2 + this.heroYaw, 0);
+    this.anim.update(poseT, mods, bob, this.anticipation(poseT));
 
     // blade-lock sparks
     if (this.anim.holding && songTime - this.lastGrindSpark > 1 / SWORD_FX.grindSparks) {
@@ -387,18 +449,19 @@ export class ArenaView {
       this.hitAt,
       this.dropped,
     );
-    this.updateEnemies(songTime, phase);
+    this.updateEnemies(poseT, phase);
     this.voxels.update(dt);
     this.rings.update(dt);
 
     this.shake = Math.max(0, this.shake - dt);
     this.fovPulse = Math.max(0, this.fovPulse - dt * 10);
-    const [cx, cy, cz] = CAMERA.position;
+    const view = this.view ?? CAMERA;
+    const [cx, cy, cz] = view.position;
     const sh = this.shake * 0.6;
     this.camera.position.set(cx + (Math.random() - 0.5) * sh, cy + (Math.random() - 0.5) * sh, cz);
-    this.camera.lookAt(...CAMERA.lookAt);
-    const baseFov =
-      this.camera.aspect < 1.2 ? CAMERA.fov * (1.2 / this.camera.aspect) ** 0.6 : CAMERA.fov;
+    this.camera.lookAt(...view.lookAt);
+    const fov = view.fov ?? CAMERA.fov;
+    const baseFov = this.camera.aspect < 1.2 ? fov * (1.2 / this.camera.aspect) ** 0.6 : fov;
     this.camera.fov = baseFov - this.fovPulse;
     this.camera.updateProjectionMatrix();
 
@@ -446,11 +509,14 @@ export class ArenaView {
     const duel = session.duel;
     const k = duel.activeEncounter(t);
     const start = k === null ? 0 : (session.encounterStart(k) ?? 0);
-    const tel = telegraphAt(k, start, k === null ? [] : session.encounterCues(k), t, {
-      lead: DUEL.telegraphLead,
-      resolve: DUEL.resolveTime,
-      walkIn: this.walkIn,
-    });
+    const cues = k === null ? [] : session.encounterCues(k);
+    const tel = this.telegraph
+      ? this.telegraph(k, start, cues, t)
+      : telegraphAt(k, start, cues, t, {
+          lead: DUEL.telegraphLead,
+          resolve: DUEL.resolveTime,
+          walkIn: this.walkIn,
+        });
     const showing = new Set<number>();
     const walkDistance = ARENA.enterDistance - ARENA.duelDistance;
     const exitOf = (e: number) => {

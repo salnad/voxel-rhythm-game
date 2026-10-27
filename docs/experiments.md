@@ -30,7 +30,8 @@ it 45-90 s.
    - `options`: static switches. `highway: false` hides the floor lanes, `laneLabels: false` hides
      the key boxes, `enemyIcon: false` hides the next-action icon, `windows` widens or narrows the
      judgement windows, `musicMapping` forces a mapping, `approachSeconds` sets cue lead time,
-     `keys` overrides the lane keys, `keyLegend` labels them on the how-to card.
+     `keys` overrides the lane keys, `altKeys` adds a second key per lane (e.g. arrows),
+     `keyLegend` labels them on the how-to card.
    - `chart()`: return a `ChartFile` (default: the Lab chart).
    - `create(ctx)`: build the per-run runtime. `ctx` has the Three.js `scene` and `camera`, the
      `arena` (`enemyRig()`, `heroRig`, `toScreen()`, `highway`, `onBeforeRender()`), the `session`
@@ -40,6 +41,19 @@ it 45-90 s.
      - `update(t, dt, approach)`: per frame, after the scene is posed and before it renders,
      - `drawHud(ctx2d, t, w, h)`: per frame, after the HUD,
      - `dispose()`: remove meshes, listeners and audio nodes.
+       Optional `arena` hooks (set in `create`, reset in `dispose`; the defaults are the normal game):
+     - `arena.view = { position, lookAt, fov? }`: camera placement override (`null` = `CAMERA`).
+     - `arena.telegraph = (encounter, encounterStart, cues, t) => Telegraph`: replaces the enemy's
+       wind-up timing (default `telegraphAt` with DUEL's lead); `next: null` keeps it in idle.
+     - `arena.duelEffects = false`: turns off the built-in hit/miss juice (world labels, debris,
+       rings, shake, hurt reaction) so the experiment can draw its own.
+     - `arena.pressMove = (lane) => Action | null`: which hero move a key press plays (default: the
+       lane's action; `null` plays none).
+     - `arena.playHeroMove(action, t?)`: play a hero move now as if it connected (e.g. a riposte).
+     - `arena.hitStop(seconds, at?)`: freeze the hero's and enemy's poses (impact hit-stop).
+     - `arena.setHeroLean(yaw, pitch)`: turn / tilt the hero's whole body (0, 0 = rest).
+     - `arena.hurtHero(t?)`: the hero's flinch and knockback (useful with `duelEffects = false`).
+     - `arena.enemyRig(true)`: also return the rig while it's hidden (e.g. after defeat).
 2. Add it to `EXPERIMENTS` in `src/experiments/registry.ts`.
 3. `tests/experiments.test.ts` checks every registered experiment automatically (metadata, chart
    validity and length, an autoplay pass). Add unit tests for any pure logic you write.

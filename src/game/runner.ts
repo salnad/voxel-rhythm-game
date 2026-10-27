@@ -84,7 +84,7 @@ export class PlayRunner {
     this.engine = new MusicEngine(ctx, chart, map.stems);
     const keys = xo.keys ?? settings.keys4;
     this.keyboard = new KeyboardLanes((perf) => this.engine.timeAt(perf));
-    this.keyboard.setKeys(opts.autoplay ? [] : [...keys]);
+    this.keyboard.setKeys(opts.autoplay ? [] : [...keys], [...(xo.altKeys ?? [])]);
     this.arena = new ArenaView(els.arenaCanvas, els.labelLayer, chart, this.session, {
       highway: xo.highway ?? true,
       enemyIcon: xo.enemyIcon ?? true,
