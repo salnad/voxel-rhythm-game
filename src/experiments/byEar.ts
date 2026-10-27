@@ -6,7 +6,6 @@ import { hexA } from '../render/icons';
 import { byEarChart } from './audioFirst/charts';
 import { CountInVoices } from './audioFirst/countInVoices';
 import { Juice } from './audioFirst/juice';
-import { insertMasterLimiter } from './audioFirst/mix';
 import { countInPlan, teachAlpha, type CountInEvent } from './audioFirst/timing';
 import type { Experiment, ExperimentContext, ExperimentRuntime } from './types';
 
@@ -30,9 +29,8 @@ interface Pending {
 }
 
 function createByEar(x: ExperimentContext): ExperimentRuntime {
-  const { audio, engine, session, chart, arena, camera, keys, sfx } = x;
+  const { audio, engine, session, chart, arena, camera, keys } = x;
   const spb = 60 / chart.tempo.bpmAtBeat(0);
-  const limiter = insertMasterLimiter(engine, audio, sfx);
   const voices = new CountInVoices(audio);
   const level = audio.createGain();
   level.gain.value = 0.9;
@@ -168,7 +166,6 @@ function createByEar(x: ExperimentContext): ExperimentRuntime {
       pending.clear();
       voices.dispose();
       level.disconnect();
-      limiter.dispose();
     },
   };
 }

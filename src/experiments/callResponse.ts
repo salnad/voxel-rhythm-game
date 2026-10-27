@@ -16,7 +16,6 @@ import type { Judgement } from '../rhythm/judge';
 import { callResponseChart } from './audioFirst/charts';
 import { Juice } from './audioFirst/juice';
 import { KeysoundPlayer } from './audioFirst/keysoundPlayer';
-import { insertMasterLimiter } from './audioFirst/mix';
 import { onStrayPress } from './audioFirst/presses';
 import { performEnvelope, punchEnvelope } from './audioFirst/timing';
 import { NO_MUSIC_LAYER, type Experiment, type ExperimentContext } from './types';
@@ -46,8 +45,7 @@ export function exchangeAt(
 }
 
 function createCallResponse(c: ExperimentContext) {
-  const { audio, engine, session, chart, arena, camera, keys, sfx } = c;
-  const limiter = insertMasterLimiter(engine, audio, sfx);
+  const { audio, engine, session, chart, arena, camera, keys } = c;
   const player = new KeysoundPlayer(audio);
   player.bus.connect(engine.musicBus);
   void player.load(`${CR_SONG_NAME}:answers`, cueGroups(composeCallResponse()), CR_BPM);
@@ -229,7 +227,6 @@ function createCallResponse(c: ExperimentContext) {
       off.forEach((f) => f());
       arena.setEnemyPoseFilter(null);
       player.dispose();
-      limiter.dispose();
     },
   };
 }

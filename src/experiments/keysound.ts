@@ -7,7 +7,6 @@ import { hexA } from '../render/icons';
 import { keysoundChart } from './audioFirst/charts';
 import { Juice } from './audioFirst/juice';
 import { KeysoundPlayer } from './audioFirst/keysoundPlayer';
-import { insertMasterLimiter } from './audioFirst/mix';
 import { onStrayPress } from './audioFirst/presses';
 import { punchEnvelope } from './audioFirst/timing';
 import { NO_MUSIC_LAYER, type Experiment, type ExperimentContext } from './types';
@@ -35,8 +34,7 @@ export const keysound: Experiment = {
   options: { musicMapping: NO_MUSIC_LAYER, keyLegend: 'A S D F' },
   chart: keysoundChart,
   create: (x: ExperimentContext) => {
-    const { audio, engine, session, chart, arena, camera, sfx } = x;
-    const limiter = insertMasterLimiter(engine, audio, sfx);
+    const { audio, engine, session, chart, arena, camera } = x;
     const player = new KeysoundPlayer(audio);
     player.bus.connect(engine.musicBus);
     void player.load(
@@ -91,7 +89,6 @@ export const keysound: Experiment = {
       dispose: () => {
         off.forEach((f) => f());
         player.dispose();
-        limiter.dispose();
       },
     };
   },

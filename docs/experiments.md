@@ -83,3 +83,21 @@ Rules of thumb:
   judgement pops and a combo counter at the fight.
 - `draw.ts`: cue badges (one shape + colour + icon per action, key chip, wrong-key shake), the
   compact key legend that replaces the lane labels, impact lines and screen-space shards.
+
+## Optional core hooks
+
+Small hooks experiments added to shared code. All are opt-in; the normal game never uses them.
+
+- `options.musicMapping: NO_MUSIC_LAYER` (`'none'`, `src/experiments/types.ts`): run without any
+  mix-wide music layer, for experiments that drive the music themselves (keysound,
+  call-and-response). The settings panel shows it as EXPERIMENT AUDIO.
+- `arena.setEnemyPoseFilter(fn | null)` (`src/render/arenaView.ts`): rewrite the pose input of the
+  front enemy each frame before `poseEnemy` (for example to play a pose the chart doesn't
+  schedule, or to hide the wind-up). Clear it in `dispose()`.
+- `CompEvent.cueBeat` (`src/audio/demo/composition.ts`): `composeSong` tags every note a charted
+  cue sounds (808, cue lead notes, snares, roll hats, vocal chops and the crash) with the cue's
+  beat. `withoutCues()` / `cueGroups()` (`src/audio/demo/keysounds.ts`) split a song into the
+  backing stems and one note group per cue.
+- `renderOneShots(groups, bpm)` (`src/audio/demo/render.ts`): render note groups to one-shot
+  buffers through the same instruments and bus effects as `renderSongStems`, whose output is
+  unchanged.
