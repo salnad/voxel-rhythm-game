@@ -112,7 +112,6 @@ function createParry(ctx: ExperimentContext): ExperimentRuntime {
     next: null,
     last: null,
   });
-  if (import.meta.env.DEV) (window as unknown as Record<string, unknown>).__arena = arena;
 
   const tex = starTexture();
   const sparks = new Sparks(scene);
@@ -223,6 +222,7 @@ function createParry(ctx: ExperimentContext): ExperimentRuntime {
     shake = { sx: -d.sx, sy: -d.sy, amp: 0.55, at: now };
     vignette = { d: dir, at: now };
     lean = { yaw: -d.yaw * 0.8, tilt: 0.16 - d.tilt * 0.5, at: now, hold: 0.3 };
+    arena.hurtHero(now);
     glitch();
   };
 
@@ -431,17 +431,22 @@ function createParry(ctx: ExperimentContext): ExperimentRuntime {
         c.beginPath();
         c.arc(g.x, g.y, R * (1 + 0.06 * res), a0 - ARC_HALF, a0 + ARC_HALF);
         c.stroke();
-        // key + arrow just outside the ring
-        const lx = g.x + Math.cos(a0) * R * 0.72;
-        const ly = g.y + Math.sin(a0) * R * 0.72;
-        c.font = 'bold 15px monospace';
+        // key badge sitting on the quadrant (readable over the hero's hair)
+        const lx = g.x + Math.cos(a0) * R;
+        const ly = g.y + Math.sin(a0) * R;
+        const lit = (fighting ? 0.75 : 0.35) + 0.25 * press;
+        c.fillStyle = press > 0 ? hexA(d.color, 0.5 * press + 0.2) : 'rgba(0,8,4,0.82)';
+        c.strokeStyle = hexA(d.color, lit);
+        c.lineWidth = 2;
+        c.beginPath();
+        c.arc(lx, ly, 12, 0, Math.PI * 2);
+        c.fill();
+        c.stroke();
+        c.font = 'bold 14px monospace';
         c.textAlign = 'center';
         c.textBaseline = 'middle';
-        c.lineWidth = 4;
-        c.strokeStyle = 'rgba(0,0,0,0.75)';
-        c.strokeText(keyLabel(ctx.keys[lane] ?? ''), lx, ly);
-        c.fillStyle = hexA(d.color, (fighting ? 0.6 : 0.25) + 0.4 * press);
-        c.fillText(keyLabel(ctx.keys[lane] ?? ''), lx, ly);
+        c.fillStyle = press > 0 ? PALETTE.white : hexA(d.color, lit);
+        c.fillText(keyLabel(ctx.keys[lane] ?? ''), lx, ly + 1);
       }
 
       // incoming strikes: an arc per strike closing onto its quadrant exactly on the beat
@@ -571,7 +576,7 @@ function createParry(ctx: ExperimentContext): ExperimentRuntime {
           const s = 1 + 0.4 * Math.max(0, 1 - age / 0.12);
           c.save();
           c.globalAlpha = a;
-          c.translate(w / 2, h * 0.3);
+          c.translate(w / 2, h * 0.2);
           c.scale(s, s);
           c.shadowColor = banner.color;
           c.shadowBlur = 24;

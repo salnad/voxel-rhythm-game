@@ -222,6 +222,12 @@ export class ArenaView {
     this.heroPitch = pitch;
   }
 
+  /** The hero's hit reaction (flinch + knockback), for experiments that turn off duelEffects. */
+  hurtHero(t = this.now): void {
+    this.hurtAt = t;
+    this.anim.hurt(t);
+  }
+
   private moveFor(lane: number): Action | null {
     if (this.pressMove) return this.pressMove(lane);
     return (this.chart.lanes[lane] as Action | undefined) ?? null;
