@@ -21,6 +21,8 @@ const LABEL: Record<Judgement, string> = {
 export interface HudOptions {
   /** Key/action boxes along the bottom. Default true. */
   laneLabels?: boolean;
+  /** Judgement text and combo counter beside the lanes. Default true. */
+  judgement?: boolean;
   /** COMBO / RETRY tags drawn on the highway. Default true. */
   comboTags?: boolean;
   /** Chart prompts. Default true. */
@@ -75,8 +77,10 @@ export class HudOverlay {
 
     const lanes = this.arena.laneScreen();
     if (this.opts.laneLabels ?? true) this.drawLaneLabels(lanes, W, H);
-    this.drawJudgement(t, lanes, W);
-    this.drawCombo(lanes, W);
+    if (this.opts.judgement ?? true) {
+      this.drawJudgement(t, lanes, W);
+      this.drawCombo(lanes, W);
+    }
     if (this.opts.comboTags ?? true) this.drawComboTags(t, approach);
     if (this.opts.prompts ?? true) this.drawPrompt(t, W, H);
     this.drawEnemyBanner(t, W);

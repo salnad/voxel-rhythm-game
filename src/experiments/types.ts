@@ -43,6 +43,11 @@ export interface ExperimentOptions {
   laneLabels?: boolean;
   /** The next-action icon over the enemy's head. Default true. */
   enemyIcon?: boolean;
+  /**
+   * The HUD's judgement text and combo counter (placed beside the lanes). Default true; turn it
+   * off when the experiment draws its own at the fight.
+   */
+  judgementHud?: boolean;
   /** Tutorial prompts from the chart. Default true. */
   prompts?: boolean;
   /** Judgement window overrides (half-widths in seconds). */
