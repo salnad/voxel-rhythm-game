@@ -35,10 +35,13 @@ it 45-90 s.
      arrows), `keyLegend` labels them on the how-to card.
    - `chart()`: return a `ChartFile` (default: the Lab chart).
    - `create(ctx)`: build the per-run runtime. `ctx` has the Three.js `scene` and `camera`, the
-     `arena` (`enemyRig()`, `heroRig`, `toScreen()`, `highway`, `onBeforeRender()`), the `session`
-     (bus events: `input`, `judgement`, `action`, `duel`, `combo`, `cues`, `measure`), the
-     `chart`, the music `engine`, the `audio` context and `sfx`. Return any of:
+     `arena` (`enemyRig()`, `heroRig`, `toScreen()`, `highway`, `onBeforeRender()`,
+     `playMove()`), the `session` (bus events: `input`, `judgement`, `action`, `duel`, `combo`,
+     `cues`, `measure`), the `chart`, the music `engine`, the `audio` context, `sfx` and the
+     background `rain` (`pulse(amount)`). Return any of:
      - `mapInput(input, t)`: remap or swallow keyboard/pointer inputs before the judge,
+     - `pollInputs(t)`: inputs the runtime adds this frame (presses it held back and now releases,
+       scripted moves); they reach the judge as-is, sorted in with the keyboard's,
      - `update(t, dt, approach)`: per frame, after the scene is posed and before it renders,
      - `drawHud(ctx2d, t, w, h)`: per frame, after the HUD,
      - `dispose()`: remove meshes, listeners and audio nodes.
@@ -61,6 +64,21 @@ it 45-90 s.
 2. Add it to `EXPERIMENTS` in `src/experiments/registry.ts`.
 3. `tests/experiments.test.ts` checks every registered experiment automatically (metadata, chart
    validity and length, an autoplay pass). Add unit tests for any pure logic you write.
+
+Hero timing hooks (both optional):
+
+- `LaneInput.moveAt`: song time the hero's move should connect. The judge still grades `time`;
+  the arena starts the swing so its contact frame lands on `moveAt` (on-beat holds an early press
+  and releases it with `moveAt` = the cue time).
+- `arena.playMove(action, contactAt, hit)`: play a hero move outside the judge, for experiments
+  that swallow inputs and resolve them themselves (freestyle's free attacks). It connects at
+  `contactAt` (input timebase); `hit` adds the impact pose, `false` plays it as a whiff.
+
+`src/experiments/juice/` is a small shared kit: `Juice` (voxel sparks, rings, camera punch and
+shake, enemy flinch, hero squash/stretch, screen flashes, world-anchored text pops), `BeatWorld`
+(grid, hero beat ring, enemy bob, rain, camera and screen frame pulsing on the beat, with
+`intensity` and `color`), `JuiceSounds` (synth draw/impact/drum/whiff/tier sounds into `sfx`)
+and beat-phase helpers.
 
 Rules of thumb:
 
@@ -101,3 +119,28 @@ Opt-in hooks for experiments that build their own sound; the normal game never u
 - `renderOneShots(groups, bpm)` (`src/audio/demo/render.ts`): render note groups to one-shot
   buffers through the same instruments and bus effects as `renderSongStems`, whose output is
   unchanged.
+
+## Experiments
+
+- `on-beat` (ON-BEAT ASSIST, Hi-Fi Rush): perfect/great/good widen to ±60/110/160 ms. An early
+  press that will hit is held (the hero coils, an impact is pre-scheduled on the beat) and
+  released at the cue time via `pollInputs` + `moveAt`, so the hit sound, contact frame, sparks,
+  enemy reaction and camera punch all land on the beat; a late press resolves at once. Grid, rain,
+  enemy, a ring around the hero, the screen frame and a beat meter on the hit line pulse with the
+  beat. Same four lanes and keys.
+- `two-button` (TWO BUTTONS, Taiko / Rhythm Heaven): one central lane of drums, blue = DEFEND
+  (D or F), red = ATTACK (J or K). `mapInput` sends DEFEND to the block lane and ATTACK to the
+  lane of the nearest pending offensive cue, so the hero picks slash, stab or the finisher.
+  Wrong-button presses pop a hint.
+- `freestyle` (FREESTYLE ON THE BEAT, Metal: Hellsinger / NecroDancer): the chart
+  (`freestyle/chart.ts`) keeps only LAB.EXE's blocks plus a finisher per enemy (six enemies).
+  A blocks through the normal judge and duel; S D F are swallowed in `mapInput` and judged against
+  the eighth-note grid (±35 perfect, ±75 good). Hits climb FURY x1/x2/x4/x8/x16 (an off-beat
+  swing drops one tier, a missed block two, four idle beats one), deal damage (gently scaled by
+  fury, half on the "and"), and play a note in key (S lead, D hats, F vocal chop). Song parts
+  layer in with fury on the next beat: 808 + perc, then lead, chops, backing. At 0 HP the enemy
+  is BROKEN; its charted finisher then connects (pressing an attack on it, or automatically on
+  the beat). An enemy not broken by its finisher escapes. Deviation from "finish on the next
+  downbeat": walk-ins stay at the charted phrase boundaries so the duel sim and music stay in
+  sync; overkill hits after the break score at the full multiplier. Autoplay runs an internal bot
+  that attacks on a fixed eighth pattern clear of the cues.
