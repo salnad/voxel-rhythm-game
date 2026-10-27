@@ -1,0 +1,103 @@
+{
+  "slot": "pr-15",
+  "kind": "pr",
+  "status": "archived",
+  "pr": 15,
+  "title": "Playtest Lab: handle saved runs from an older experiment set",
+  "url": "https://github.com/salnad/voxel-rhythm-game/pull/15",
+  "branch": "cursor/lab-stale-run-cda4",
+  "sha": "00db845a59df45c5495d2543bce48e128c1a8395",
+  "subject": "Playtest Lab: treat a saved run from a different experiment set as finished (new START with every experiment, RESULTS still available)",
+  "builtAt": "2026-10-27T15:47:04.983Z",
+  "repo": "salnad/voxel-rhythm-game",
+  "mappings": [
+    {
+      "key": "instruments",
+      "label": "INSTRUMENTS",
+      "description": "Each move plays a part: block = 808, slash = lead (your synth patch), stab = hats/perc, flourish = vocal chops. A miss mutes or glitches that part."
+    },
+    {
+      "key": "sword",
+      "label": "SWORD SFX",
+      "description": "Moves make sword sounds; the song plays as written."
+    },
+    {
+      "key": "fx",
+      "label": "B · PRODUCER FX",
+      "description": "Each move is a mix-wide effect: BLOCK pumps, SLASH sweeps a filter, STAB stutters, FLOURISH lifts into the next bar. Misses fumble the effect."
+    },
+    {
+      "key": "hybrid",
+      "label": "C · HYBRID",
+      "description": "Moves play instruments (808, lead, hats, vocal chops); a clean combo measure fires a production flourish at the bar line."
+    }
+  ],
+  "experiments": [
+    {
+      "key": "baseline",
+      "label": "BASELINE · 4 LANES",
+      "description": "The current game: four lanes on the floor, cues scroll to a hit line."
+    },
+    {
+      "key": "tells",
+      "label": "TELLS · READ THE ENEMY",
+      "description": "No highway, no icons: the enemy’s wind-up is the cue, always one beat before the hit."
+    },
+    {
+      "key": "parry",
+      "label": "PARRY · DIRECTIONAL DEFLECTS",
+      "description": "Every cue is a strike from a side: press that direction on the beat to deflect it."
+    },
+    {
+      "key": "one-lane",
+      "label": "ONE LANE · COLUMN",
+      "description": "One central lane through the enemy: badge colour and shape say which key."
+    },
+    {
+      "key": "one-lane-strip",
+      "label": "ONE LANE · TAIKO STRIP",
+      "description": "One horizontal track at the enemy’s chest: badges slide onto the enemy, Taiko style."
+    },
+    {
+      "key": "converge",
+      "label": "CONVERGE · BADGES ONTO THE ENEMY",
+      "description": "No lanes: cue badges fly in from around the enemy and land on its chest on the beat."
+    },
+    {
+      "key": "approach-ring",
+      "label": "APPROACH RING · ON THE ENEMY",
+      "description": "No lanes: a ring shrinks onto the spot of the enemy you must hit and closes on the beat."
+    },
+    {
+      "key": "keysound",
+      "label": "KEYSOUND · YOU PLAY THE SONG",
+      "description": "The cue notes are cut from the song: only your hits play them, on the beat."
+    },
+    {
+      "key": "call-response",
+      "label": "CALL & RESPONSE · ANSWER THE ENEMY",
+      "description": "The enemy plays a one-bar phrase; you play it back in the next bar. No highway."
+    },
+    {
+      "key": "by-ear",
+      "label": "BY EAR · SOUND CUES ONLY",
+      "description": "No highway, no icons: every move is announced by its own sound a beat ahead."
+    },
+    {
+      "key": "on-beat",
+      "label": "ON-BEAT ASSIST",
+      "description": "Forgiving timing; every hit resolves exactly on the beat, and the arena pulses."
+    },
+    {
+      "key": "two-button",
+      "label": "TWO BUTTONS · DEFEND / ATTACK",
+      "description": "One lane, two buttons: defend or attack. The hero picks the move."
+    },
+    {
+      "key": "freestyle",
+      "label": "FREESTYLE ON THE BEAT",
+      "description": "Only the enemy is charted. Attack freely on the beat; FURY climbs and the song grows."
+    }
+  ],
+  "closedAt": "2026-10-27T15:47:16Z"
+}

@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>VOXEL//RHYTHM playtest hub</title>
+<style>
+:root { --g:#39ff6a; --g-dim:#0b3d18; --g-mid:#1a8f3c; --w:#e6ffe9; --red:#ff3b5c; --cyan:#7dfcff; --gold:#ffd23b; }
+* { box-sizing: border-box; }
+body { margin:0; background:#000 radial-gradient(ellipse at top, #04210d 0%, #000 70%) fixed; color:var(--g);
+  font:14px/1.5 ui-monospace, 'JetBrains Mono', Menlo, Consolas, monospace; }
+main { max-width: 980px; margin: 0 auto; padding: 32px 20px 64px; }
+h1 { margin:0; font-size:40px; letter-spacing:6px; color:var(--w); text-shadow:2px 0 var(--red), -2px 0 var(--cyan), 0 0 18px var(--g); }
+.lead { color:var(--g-mid); margin:4px 0 24px; }
+h2 { color:var(--w); letter-spacing:3px; font-size:16px; border-bottom:1px solid var(--g-dim); padding-bottom:6px; margin:28px 0 12px; }
+.note, .empty { color:var(--g-mid); margin:0 0 12px; }
+a { color:var(--cyan); }
+.card { border:1px solid var(--g-mid); background:rgba(0,12,4,.85); padding:12px 16px; margin-bottom:10px;
+  box-shadow: inset 0 0 24px rgba(57,255,106,.06); }
+.card.archived { border-color:var(--g-dim); opacity:.85; }
+.head { display:flex; justify-content:space-between; align-items:center; gap:12px; }
+h3 { margin:0; font-size:15px; color:var(--w); font-weight:600; }
+.tag { display:inline-block; border:1px solid var(--g); color:var(--g); padding:0 6px; margin-right:6px; text-decoration:none; font-size:12px; }
+.archived .tag { border-color:var(--g-mid); color:var(--g-mid); }
+.play { border:1px solid var(--g); color:var(--g); padding:6px 14px; text-decoration:none; letter-spacing:2px; white-space:nowrap; }
+.play:hover, .play:focus-visible { background:var(--g); color:#000; outline:none; }
+.meta { color:var(--g-mid); font-size:12px; margin-top:4px; }
+.meta code { color:var(--g); }
+.branch { color:var(--g); }
+.subject { color:var(--w); margin-left:6px; }
+.mappings { margin-top:8px; display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
+.mappings .label { color:var(--g-mid); font-size:12px; margin-right:4px; }
+.chip { border:1px solid var(--g-mid); color:var(--g); padding:2px 8px; text-decoration:none; font-size:12px; }
+.chip:hover { border-color:var(--g); color:var(--w); background:var(--g-dim); }
+.chip.lab { border-color:var(--g); color:var(--w); }
+.tips { border:1px dashed var(--g-dim); padding:10px 14px; color:var(--g-mid); font-size:12px; margin-top:32px; }
+.tips b { color:var(--w); font-weight:600; }
+footer { color:var(--g-dim); font-size:12px; margin-top:24px; }
+</style>
+</head>
+<body>
+<main>
+<h1>VOXEL//RHYTHM</h1>
+<p class="lead">playtest hub · every version of the game, each a full build under its own path. Links open in a new tab so you can compare side by side.</p>
+<section><h2>LATEST</h2>
+<article class="card live">
+  <div class="head"><h3><span class="tag">MAIN</span> latest</h3><a class="play" href="main/" target="_blank">▶ PLAY</a></div>
+  <div class="meta">
+    <span class="branch">main</span> ·
+    <a href="https://github.com/salnad/voxel-rhythm-game/commit/99fa29f9d49296a205bb107b4cf9f4d5b9102f8f" target="_blank" rel="noopener"><code>99fa29f</code></a>
+    <span class="subject">Merge #15: Playtest Lab: handle saved runs from an older experiment set</span>
+  </div>
+  <div class="meta">built <time data-t="2026-10-27T15:47:42.168Z">2026-10-27T15:47:42.168Z</time> · <a href="main/editor.html" target="_blank">map editor</a> · <code class="path">/main/</code></div>
+  <div class="mappings"><span class="label">experiments</span><a class="chip lab" href="main/?lab=1" target="_blank" title="Rate every experiment in a guided sequence">PLAYTEST LAB</a><a class="chip" href="main/?exp=baseline" target="_blank" title="The current game: four lanes on the floor, cues scroll to a hit line.">BASELINE · 4 LANES</a><a class="chip" href="main/?exp=tells" target="_blank" title="No highway, no icons: the enemy’s wind-up is the cue, always one beat before the hit.">TELLS · READ THE ENEMY</a><a class="chip" href="main/?exp=parry" target="_blank" title="Every cue is a strike from a side: press that direction on the beat to deflect it.">PARRY · DIRECTIONAL DEFLECTS</a><a class="chip" href="main/?exp=one-lane" target="_blank" title="One central lane through the enemy: badge colour and shape say which key.">ONE LANE · COLUMN</a><a class="chip" href="main/?exp=one-lane-strip" target="_blank" title="One horizontal track at the enemy’s chest: badges slide onto the enemy, Taiko style.">ONE LANE · TAIKO STRIP</a><a class="chip" href="main/?exp=converge" target="_blank" title="No lanes: cue badges fly in from around the enemy and land on its chest on the beat.">CONVERGE · BADGES ONTO THE ENEMY</a><a class="chip" href="main/?exp=approach-ring" target="_blank" title="No lanes: a ring shrinks onto the spot of the enemy you must hit and closes on the beat.">APPROACH RING · ON THE ENEMY</a><a class="chip" href="main/?exp=keysound" target="_blank" title="The cue notes are cut from the song: only your hits play them, on the beat.">KEYSOUND · YOU PLAY THE SONG</a><a class="chip" href="main/?exp=call-response" target="_blank" title="The enemy plays a one-bar phrase; you play it back in the next bar. No highway.">CALL &#38; RESPONSE · ANSWER THE ENEMY</a><a class="chip" href="main/?exp=by-ear" target="_blank" title="No highway, no icons: every move is announced by its own sound a beat ahead.">BY EAR · SOUND CUES ONLY</a><a class="chip" href="main/?exp=on-beat" target="_blank" title="Forgiving timing; every hit resolves exactly on the beat, and the arena pulses.">ON-BEAT ASSIST</a><a class="chip" href="main/?exp=two-button" target="_blank" title="One lane, two buttons: defend or attack. The hero picks the move.">TWO BUTTONS · DEFEND / ATTACK</a><a class="chip" href="main/?exp=freestyle" target="_blank" title="Only the enemy is charted. Attack freely on the beat; FURY climbs and the song grows.">FREESTYLE ON THE BEAT</a></div>
+  <div class="mappings"><span class="label">music mapping</span><a class="chip" href="main/?mapping=instruments" target="_blank" title="Each move plays a part: block = 808, slash = lead (your synth patch), stab = hats/perc, flourish = vocal chops. A miss mutes or glitches that part.">INSTRUMENTS</a><a class="chip" href="main/?mapping=sword" target="_blank" title="Moves make sword sounds; the song plays as written.">SWORD SFX</a><a class="chip" href="main/?mapping=fx" target="_blank" title="Each move is a mix-wide effect: BLOCK pumps, SLASH sweeps a filter, STAB stutters, FLOURISH lifts into the next bar. Misses fumble the effect.">B · PRODUCER FX</a><a class="chip" href="main/?mapping=hybrid" target="_blank" title="Moves play instruments (808, lead, hats, vocal chops); a clean combo measure fires a production flourish at the bar line.">C · HYBRID</a></div>
+</article>
+</section>
+<section><h2>OPEN PULL REQUESTS</h2><p class="note">Rebuilt on every push to the PR branch. A PR leaves this list when it closes.</p>
+<p class="empty">No open pull requests.</p>
+</section>
+<section><h2>RECENTLY MERGED</h2><p class="note">Milestones kept as they were when their PR merged (newest 8).</p>
+<article class="card archived">
+  <div class="head"><h3><a class="tag" href="https://github.com/salnad/voxel-rhythm-game/pull/15" target="_blank" rel="noopener">#15</a> Playtest Lab: handle saved runs from an older experiment set</h3><a class="play" href="pr-15/" target="_blank">▶ PLAY</a></div>
+  <div class="meta">
+    <span class="branch">cursor/lab-stale-run-cda4</span> ·
+    <a href="https://github.com/salnad/voxel-rhythm-game/commit/00db845a59df45c5495d2543bce48e128c1a8395" target="_blank" rel="noopener"><code>00db845</code></a>
+    
+  </div>
+  <div class="meta">built <time data-t="2026-10-27T15:47:04.983Z">2026-10-27T15:47:04.983Z</time> · merged <time data-t="2026-10-27T15:47:16Z">2026-10-27T15:47:16Z</time> · <a href="pr-15/editor.html" target="_blank">map editor</a> · <code class="path">/pr-15/</code></div>
+  <div class="mappings"><span class="label">experiments</span><a class="chip lab" href="pr-15/?lab=1" target="_blank" title="Rate every experiment in a guided sequence">PLAYTEST LAB</a><a class="chip" href="pr-15/?exp=baseline" target="_blank" title="The current game: four lanes on the floor, cues scroll to a hit line.">BASELINE · 4 LANES</a><a class="chip" href="pr-15/?exp=tells" target="_blank" title="No highway, no icons: the enemy’s wind-up is the cue, always one beat before the hit.">TELLS · READ THE ENEMY</a><a class="chip" href="pr-15/?exp=parry" target="_blank" title="Every cue is a strike from a side: press that direction on the beat to deflect it.">PARRY · DIRECTIONAL DEFLECTS</a><a class="chip" href="pr-15/?exp=one-lane" target="_blank" title="One central lane through the enemy: badge colour and shape say which key.">ONE LANE · COLUMN</a><a class="chip" href="pr-15/?exp=one-lane-strip" target="_blank" title="One horizontal track at the enemy’s chest: badges slide onto the enemy, Taiko style.">ONE LANE · TAIKO STRIP</a><a class="chip" href="pr-15/?exp=converge" target="_blank" title="No lanes: cue badges fly in from around the enemy and land on its chest on the beat.">CONVERGE · BADGES ONTO THE ENEMY</a><a class="chip" href="pr-15/?exp=approach-ring" target="_blank" title="No lanes: a ring shrinks onto the spot of the enemy you must hit and closes on the beat.">APPROACH RING · ON THE ENEMY</a><a class="chip" href="pr-15/?exp=keysound" target="_blank" title="The cue notes are cut from the song: only your hits play them, on the beat.">KEYSOUND · YOU PLAY THE SONG</a><a class="chip" href="pr-15/?exp=call-response" target="_blank" title="The enemy plays a one-bar phrase; you play it back in the next bar. No highway.">CALL &#38; RESPONSE · ANSWER THE ENEMY</a><a class="chip" href="pr-15/?exp=by-ear" target="_blank" title="No highway, no icons: every move is announced by its own sound a beat ahead.">BY EAR · SOUND CUES ONLY</a><a class="chip" href="pr-15/?exp=on-beat" target="_blank" title="Forgiving timing; every hit resolves exactly on the beat, and the arena pulses.">ON-BEAT ASSIST</a><a class="chip" href="pr-15/?exp=two-button" target="_blank" title="One lane, two buttons: defend or attack. The hero picks the move.">TWO BUTTONS · DEFEND / ATTACK</a><a class="chip" href="pr-15/?exp=freestyle" target="_blank" title="Only the enemy is charted. Attack freely on the beat; FURY climbs and the song grows.">FREESTYLE ON THE BEAT</a></div>
+  <div class="mappings"><span class="label">music mapping</span><a class="chip" href="pr-15/?mapping=instruments" target="_blank" title="Each move plays a part: block = 808, slash = lead (your synth patch), stab = hats/perc, flourish = vocal chops. A miss mutes or glitches that part.">INSTRUMENTS</a><a class="chip" href="pr-15/?mapping=sword" target="_blank" title="Moves make sword sounds; the song plays as written.">SWORD SFX</a><a class="chip" href="pr-15/?mapping=fx" target="_blank" title="Each move is a mix-wide effect: BLOCK pumps, SLASH sweeps a filter, STAB stutters, FLOURISH lifts into the next bar. Misses fumble the effect.">B · PRODUCER FX</a><a class="chip" href="pr-15/?mapping=hybrid" target="_blank" title="Moves play instruments (808, lead, hats, vocal chops); a clean combo measure fires a production flourish at the bar line.">C · HYBRID</a></div>
+</article>
+<article class="card archived">
+  <div class="head"><h3><a class="tag" href="https://github.com/salnad/voxel-rhythm-game/pull/14" target="_blank" rel="noopener">#14</a> Experiments: on-beat assist, two buttons, freestyle on the beat</h3><a class="play" href="pr-14/" target="_blank">▶ PLAY</a></div>
+  <div class="meta">
+    <span class="branch">cursor/forgiveness-freedom-experiments-c12e</span> ·
+    <a href="https://github.com/salnad/voxel-rhythm-game/commit/395a9ba5567a44f64644d51d5ee263f8cd5f95ee" target="_blank" rel="noopener"><code>395a9ba</code></a>
+    
+  </div>
+  <div class="meta">built <time data-t="2026-10-27T15:32:21.777Z">2026-10-27T15:32:21.777Z</time> · merged <time data-t="2026-10-27T15:34:16Z">2026-10-27T15:34:16Z</time> · <a href="pr-14/editor.html" target="_blank">map editor</a> · <code class="path">/pr-14/</code></div>
+  <div class="mappings"><span class="label">experiments</span><a class="chip lab" href="pr-14/?lab=1" target="_blank" title="Rate every experiment in a guided sequence">PLAYTEST LAB</a><a class="chip" href="pr-14/?exp=baseline" target="_blank" title="The current game: four lanes on the floor, cues scroll to a hit line.">BASELINE · 4 LANES</a><a class="chip" href="pr-14/?exp=tells" target="_blank" title="No highway, no icons: the enemy’s wind-up is the cue, always one beat before the hit.">TELLS · READ THE ENEMY</a><a class="chip" href="pr-14/?exp=parry" target="_blank" title="Every cue is a strike from a side: press that direction on the beat to deflect it.">PARRY · DIRECTIONAL DEFLECTS</a><a class="chip" href="pr-14/?exp=one-lane" target="_blank" title="One central lane through the enemy: badge colour and shape say which key.">ONE LANE · COLUMN</a><a class="chip" href="pr-14/?exp=one-lane-strip" target="_blank" title="One horizontal track at the enemy’s chest: badges slide onto the enemy, Taiko style.">ONE LANE · TAIKO STRIP</a><a class="chip" href="pr-14/?exp=converge" target="_blank" title="No lanes: cue badges fly in from around the enemy and land on its chest on the beat.">CONVERGE · BADGES ONTO THE ENEMY</a><a class="chip" href="pr-14/?exp=approach-ring" target="_blank" title="No lanes: a ring shrinks onto the spot of the enemy you must hit and closes on the beat.">APPROACH RING · ON THE ENEMY</a><a class="chip" href="pr-14/?exp=keysound" target="_blank" title="The cue notes are cut from the song: only your hits play them, on the beat.">KEYSOUND · YOU PLAY THE SONG</a><a class="chip" href="pr-14/?exp=call-response" target="_blank" title="The enemy plays a one-bar phrase; you play it back in the next bar. No highway.">CALL &#38; RESPONSE · ANSWER THE ENEMY</a><a class="chip" href="pr-14/?exp=by-ear" target="_blank" title="No highway, no icons: every move is announced by its own sound a beat ahead.">BY EAR · SOUND CUES ONLY</a><a class="chip" href="pr-14/?exp=on-beat" target="_blank" title="Forgiving timing; every hit resolves exactly on the beat, and the arena pulses.">ON-BEAT ASSIST</a><a class="chip" href="pr-14/?exp=two-button" target="_blank" title="One lane, two buttons: defend or attack. The hero picks the move.">TWO BUTTONS · DEFEND / ATTACK</a><a class="chip" href="pr-14/?exp=freestyle" target="_blank" title="Only the enemy is charted. Attack freely on the beat; FURY climbs and the song grows.">FREESTYLE ON THE BEAT</a></div>
+  <div class="mappings"><span class="label">music mapping</span><a class="chip" href="pr-14/?mapping=instruments" target="_blank" title="Each move plays a part: block = 808, slash = lead (your synth patch), stab = hats/perc, flourish = vocal chops. A miss mutes or glitches that part.">INSTRUMENTS</a><a class="chip" href="pr-14/?mapping=sword" target="_blank" title="Moves make sword sounds; the song plays as written.">SWORD SFX</a><a class="chip" href="pr-14/?mapping=fx" target="_blank" title="Each move is a mix-wide effect: BLOCK pumps, SLASH sweeps a filter, STAB stutters, FLOURISH lifts into the next bar. Misses fumble the effect.">B · PRODUCER FX</a><a class="chip" href="pr-14/?mapping=hybrid" target="_blank" title="Moves play instruments (808, lead, hats, vocal chops); a clean combo measure fires a production flourish at the bar line.">C · HYBRID</a></div>
+</article>
+<article class="card archived">
+  <div class="head"><h3><a class="tag" href="https://github.com/salnad/voxel-rhythm-game/pull/13" target="_blank" rel="noopener">#13</a> Experiments: audio-first cues (keysound, call and response, play by ear)</h3><a class="play" href="pr-13/" target="_blank">▶ PLAY</a></div>
+  <div class="meta">
+    <span class="branch">cursor/audio-first-cues-0817</span> ·
+    <a href="https://github.com/salnad/voxel-rhythm-game/commit/625dd066e607924b45302d40b65fd616e57187ed" target="_blank" rel="noopener"><code>625dd06</code></a>
+    
+  </div>
+  <div class="meta">built <time data-t="2026-10-27T15:23:53.303Z">2026-10-27T15:23:53.303Z</time> · merged <time data-t="2026-10-27T15:24:26Z">2026-10-27T15:24:26Z</time> · <a href="pr-13/editor.html" target="_blank">map editor</a> · <code class="path">/pr-13/</code></div>
+  <div class="mappings"><span class="label">experiments</span><a class="chip lab" href="pr-13/?lab=1" target="_blank" title="Rate every experiment in a guided sequence">PLAYTEST LAB</a><a class="chip" href="pr-13/?exp=baseline" target="_blank" title="The current game: four lanes on the floor, cues scroll to a hit line.">BASELINE · 4 LANES</a><a class="chip" href="pr-13/?exp=tells" target="_blank" title="No highway, no icons: the enemy’s wind-up is the cue, always one beat before the hit.">TELLS · READ THE ENEMY</a><a class="chip" href="pr-13/?exp=parry" target="_blank" title="Every cue is a strike from a side: press that direction on the beat to deflect it.">PARRY · DIRECTIONAL DEFLECTS</a><a class="chip" href="pr-13/?exp=one-lane" target="_blank" title="One central lane through the enemy: badge colour and shape say which key.">ONE LANE · COLUMN</a><a class="chip" href="pr-13/?exp=one-lane-strip" target="_blank" title="One horizontal track at the enemy’s chest: badges slide onto the enemy, Taiko style.">ONE LANE · TAIKO STRIP</a><a class="chip" href="pr-13/?exp=converge" target="_blank" title="No lanes: cue badges fly in from around the enemy and land on its chest on the beat.">CONVERGE · BADGES ONTO THE ENEMY</a><a class="chip" href="pr-13/?exp=approach-ring" target="_blank" title="No lanes: a ring shrinks onto the spot of the enemy you must hit and closes on the beat.">APPROACH RING · ON THE ENEMY</a><a class="chip" href="pr-13/?exp=keysound" target="_blank" title="The cue notes are cut from the song: only your hits play them, on the beat.">KEYSOUND · YOU PLAY THE SONG</a><a class="chip" href="pr-13/?exp=call-response" target="_blank" title="The enemy plays a one-bar phrase; you play it back in the next bar. No highway.">CALL &#38; RESPONSE · ANSWER THE ENEMY</a><a class="chip" href="pr-13/?exp=by-ear" target="_blank" title="No highway, no icons: every move is announced by its own sound a beat ahead.">BY EAR · SOUND CUES ONLY</a></div>
+  <div class="mappings"><span class="label">music mapping</span><a class="chip" href="pr-13/?mapping=instruments" target="_blank" title="Each move plays a part: block = 808, slash = lead (your synth patch), stab = hats/perc, flourish = vocal chops. A miss mutes or glitches that part.">INSTRUMENTS</a><a class="chip" href="pr-13/?mapping=sword" target="_blank" title="Moves make sword sounds; the song plays as written.">SWORD SFX</a><a class="chip" href="pr-13/?mapping=fx" target="_blank" title="Each move is a mix-wide effect: BLOCK pumps, SLASH sweeps a filter, STAB stutters, FLOURISH lifts into the next bar. Misses fumble the effect.">B · PRODUCER FX</a><a class="chip" href="pr-13/?mapping=hybrid" target="_blank" title="Moves play instruments (808, lead, hats, vocal chops); a clean combo measure fires a production flourish at the bar line.">C · HYBRID</a></div>
+</article>
+<article class="card archived">
+  <div class="head"><h3><a class="tag" href="https://github.com/salnad/voxel-rhythm-game/pull/12" target="_blank" rel="noopener">#12</a> Experiments: enemy-anchored cues (one lane, Taiko strip, converge, approach ring)</h3><a class="play" href="pr-12/" target="_blank">▶ PLAY</a></div>
+  <div class="meta">
+    <span class="branch">cursor/enemy-anchored-cues-1bf1</span> ·
+    <a href="https://github.com/salnad/voxel-rhythm-game/commit/11178d5843a26a9b1922f9dd058ef313f25cc2ad" target="_blank" rel="noopener"><code>11178d5</code></a>
+    
+  </div>
+  <div class="meta">built <time data-t="2026-10-27T15:21:34.989Z">2026-10-27T15:21:34.989Z</time> · merged <time data-t="2026-10-27T15:21:52Z">2026-10-27T15:21:52Z</time> · <a href="pr-12/editor.html" target="_blank">map editor</a> · <code class="path">/pr-12/</code></div>
+  <div class="mappings"><span class="label">experiments</span><a class="chip lab" href="pr-12/?lab=1" target="_blank" title="Rate every experiment in a guided sequence">PLAYTEST LAB</a><a class="chip" href="pr-12/?exp=baseline" target="_blank" title="The current game: four lanes on the floor, cues scroll to a hit line.">BASELINE · 4 LANES</a><a class="chip" href="pr-12/?exp=tells" target="_blank" title="No highway, no icons: the enemy’s wind-up is the cue, always one beat before the hit.">TELLS · READ THE ENEMY</a><a class="chip" href="pr-12/?exp=parry" target="_blank" title="Every cue is a strike from a side: press that direction on the beat to deflect it.">PARRY · DIRECTIONAL DEFLECTS</a><a class="chip" href="pr-12/?exp=one-lane" target="_blank" title="One central lane through the enemy: badge colour and shape say which key.">ONE LANE · COLUMN</a><a class="chip" href="pr-12/?exp=one-lane-strip" target="_blank" title="One horizontal track at the enemy’s chest: badges slide onto the enemy, Taiko style.">ONE LANE · TAIKO STRIP</a><a class="chip" href="pr-12/?exp=converge" target="_blank" title="No lanes: cue badges fly in from around the enemy and land on its chest on the beat.">CONVERGE · BADGES ONTO THE ENEMY</a><a class="chip" href="pr-12/?exp=approach-ring" target="_blank" title="No lanes: a ring shrinks onto the spot of the enemy you must hit and closes on the beat.">APPROACH RING · ON THE ENEMY</a></div>
+  <div class="mappings"><span class="label">music mapping</span><a class="chip" href="pr-12/?mapping=instruments" target="_blank" title="Each move plays a part: block = 808, slash = lead (your synth patch), stab = hats/perc, flourish = vocal chops. A miss mutes or glitches that part.">INSTRUMENTS</a><a class="chip" href="pr-12/?mapping=sword" target="_blank" title="Moves make sword sounds; the song plays as written.">SWORD SFX</a><a class="chip" href="pr-12/?mapping=fx" target="_blank" title="Each move is a mix-wide effect: BLOCK pumps, SLASH sweeps a filter, STAB stutters, FLOURISH lifts into the next bar. Misses fumble the effect.">B · PRODUCER FX</a><a class="chip" href="pr-12/?mapping=hybrid" target="_blank" title="Moves play instruments (808, lead, hats, vocal chops); a clean combo measure fires a production flourish at the bar line.">C · HYBRID</a></div>
+</article>
+<article class="card archived">
+  <div class="head"><h3><a class="tag" href="https://github.com/salnad/voxel-rhythm-game/pull/11" target="_blank" rel="noopener">#11</a> Experiments: READ THE ENEMY (tells) and DIRECTIONAL PARRY</h3><a class="play" href="pr-11/" target="_blank">▶ PLAY</a></div>
+  <div class="meta">
+    <span class="branch">cursor/diegetic-tells-parry-2234</span> ·
+    <a href="https://github.com/salnad/voxel-rhythm-game/commit/33a3d422bee34f1ad87efe1ac052f02790f192a5" target="_blank" rel="noopener"><code>33a3d42</code></a>
+    
+  </div>
+  <div class="meta">built <time data-t="2026-10-27T15:10:10.523Z">2026-10-27T15:10:10.523Z</time> · merged <time data-t="2026-10-27T15:10:28Z">2026-10-27T15:10:28Z</time> · <a href="pr-11/editor.html" target="_blank">map editor</a> · <code class="path">/pr-11/</code></div>
+  <div class="mappings"><span class="label">experiments</span><a class="chip lab" href="pr-11/?lab=1" target="_blank" title="Rate every experiment in a guided sequence">PLAYTEST LAB</a><a class="chip" href="pr-11/?exp=baseline" target="_blank" title="The current game: four lanes on the floor, cues scroll to a hit line.">BASELINE · 4 LANES</a><a class="chip" href="pr-11/?exp=tells" target="_blank" title="No highway, no icons: the enemy’s wind-up is the cue, always one beat before the hit.">TELLS · READ THE ENEMY</a><a class="chip" href="pr-11/?exp=parry" target="_blank" title="Every cue is a strike from a side: press that direction on the beat to deflect it.">PARRY · DIRECTIONAL DEFLECTS</a></div>
+  <div class="mappings"><span class="label">music mapping</span><a class="chip" href="pr-11/?mapping=instruments" target="_blank" title="Each move plays a part: block = 808, slash = lead (your synth patch), stab = hats/perc, flourish = vocal chops. A miss mutes or glitches that part.">INSTRUMENTS</a><a class="chip" href="pr-11/?mapping=sword" target="_blank" title="Moves make sword sounds; the song plays as written.">SWORD SFX</a><a class="chip" href="pr-11/?mapping=fx" target="_blank" title="Each move is a mix-wide effect: BLOCK pumps, SLASH sweeps a filter, STAB stutters, FLOURISH lifts into the next bar. Misses fumble the effect.">B · PRODUCER FX</a><a class="chip" href="pr-11/?mapping=hybrid" target="_blank" title="Moves play instruments (808, lead, hats, vocal chops); a clean combo measure fires a production flourish at the bar line.">C · HYBRID</a></div>
+</article>
+<article class="card archived">
+  <div class="head"><h3><a class="tag" href="https://github.com/salnad/voxel-rhythm-game/pull/10" target="_blank" rel="noopener">#10</a> PRODUCER FX you can hear and see: bolder effects, on-screen feedback, FX RACK, master limiter</h3><a class="play" href="pr-10/" target="_blank">▶ PLAY</a></div>
+  <div class="meta">
+    <span class="branch">cursor/producer-fx-felt-f836</span> ·
+    <a href="https://github.com/salnad/voxel-rhythm-game/commit/5e266050aa223ac4f58d06253d1b7e9d236e52fa" target="_blank" rel="noopener"><code>5e26605</code></a>
+    
+  </div>
+  <div class="meta">built <time data-t="2026-10-27T14:56:11.622Z">2026-10-27T14:56:11.622Z</time> · merged <time data-t="2026-10-27T14:57:06Z">2026-10-27T14:57:06Z</time> · <a href="pr-10/editor.html" target="_blank">map editor</a> · <code class="path">/pr-10/</code></div>
+  <div class="mappings"><span class="label">experiments</span><a class="chip lab" href="pr-10/?lab=1" target="_blank" title="Rate every experiment in a guided sequence">PLAYTEST LAB</a><a class="chip" href="pr-10/?exp=baseline" target="_blank" title="The current game: four lanes on the floor, cues scroll to a hit line.">BASELINE · 4 LANES</a></div>
+  <div class="mappings"><span class="label">music mapping</span><a class="chip" href="pr-10/?mapping=instruments" target="_blank" title="Each move plays a part: block = 808, slash = lead (your synth patch), stab = hats/perc, flourish = vocal chops. A miss mutes or glitches that part.">INSTRUMENTS</a><a class="chip" href="pr-10/?mapping=sword" target="_blank" title="Moves make sword sounds; the song plays as written.">SWORD SFX</a><a class="chip" href="pr-10/?mapping=fx" target="_blank" title="Each move is a mix-wide effect: BLOCK pumps, SLASH sweeps a filter, STAB stutters, FLOURISH lifts into the next bar. Misses fumble the effect.">B · PRODUCER FX</a><a class="chip" href="pr-10/?mapping=hybrid" target="_blank" title="Moves play instruments (808, lead, hats, vocal chops); a clean combo measure fires a production flourish at the bar line.">C · HYBRID</a></div>
+</article>
+<article class="card archived">
+  <div class="head"><h3><a class="tag" href="https://github.com/salnad/voxel-rhythm-game/pull/9" target="_blank" rel="noopener">#9</a> Hero rebuild: short faceted sword, keyframed moves that strike on input, hit-stop, subtle synth FX</h3><a class="play" href="pr-9/" target="_blank">▶ PLAY</a></div>
+  <div class="meta">
+    <span class="branch">cursor/hero-sword-animation-eb69</span> ·
+    <a href="https://github.com/salnad/voxel-rhythm-game/commit/0008b782dfba3fbc6952fe8186428ad458562a90" target="_blank" rel="noopener"><code>0008b78</code></a>
+    
+  </div>
+  <div class="meta">built <time data-t="2026-10-27T14:52:54.247Z">2026-10-27T14:52:54.247Z</time> · merged <time data-t="2026-10-27T14:54:28Z">2026-10-27T14:54:28Z</time> · <a href="pr-9/editor.html" target="_blank">map editor</a> · <code class="path">/pr-9/</code></div>
+  <div class="mappings"><span class="label">experiments</span><a class="chip lab" href="pr-9/?lab=1" target="_blank" title="Rate every experiment in a guided sequence">PLAYTEST LAB</a><a class="chip" href="pr-9/?exp=baseline" target="_blank" title="The current game: four lanes on the floor, cues scroll to a hit line.">BASELINE · 4 LANES</a></div>
+  <div class="mappings"><span class="label">music mapping</span><a class="chip" href="pr-9/?mapping=instruments" target="_blank" title="Each move plays a part: block = 808, slash = lead (your synth patch), stab = hats/perc, flourish = vocal chops. A miss mutes or glitches that part.">INSTRUMENTS</a><a class="chip" href="pr-9/?mapping=sword" target="_blank" title="Moves make sword sounds; the song plays as written.">SWORD SFX</a><a class="chip" href="pr-9/?mapping=fx" target="_blank" title="Each move is a mix-wide effect: BLOCK pumps, SLASH sweeps a filter, STAB stutters, FLOURISH lifts into the next bar. Misses fumble the effect.">B · PRODUCER FX</a><a class="chip" href="pr-9/?mapping=hybrid" target="_blank" title="Moves play instruments (808, lead, hats, vocal chops); a clean combo measure fires a production flourish at the bar line.">C · HYBRID</a></div>
+</article>
+<article class="card archived">
+  <div class="head"><h3><a class="tag" href="https://github.com/salnad/voxel-rhythm-game/pull/8" target="_blank" rel="noopener">#8</a> Experiment framework and Playtest Lab</h3><a class="play" href="pr-8/" target="_blank">▶ PLAY</a></div>
+  <div class="meta">
+    <span class="branch">cursor/experiment-framework-cda4</span> ·
+    <a href="https://github.com/salnad/voxel-rhythm-game/commit/16435801e06de0b41c09c4ca1c9ffda13381493c" target="_blank" rel="noopener"><code>1643580</code></a>
+    
+  </div>
+  <div class="meta">built <time data-t="2026-10-27T14:34:37.849Z">2026-10-27T14:34:37.849Z</time> · merged <time data-t="2026-10-27T14:36:06Z">2026-10-27T14:36:06Z</time> · <a href="pr-8/editor.html" target="_blank">map editor</a> · <code class="path">/pr-8/</code></div>
+  <div class="mappings"><span class="label">experiments</span><a class="chip lab" href="pr-8/?lab=1" target="_blank" title="Rate every experiment in a guided sequence">PLAYTEST LAB</a><a class="chip" href="pr-8/?exp=baseline" target="_blank" title="The current game: four lanes on the floor, cues scroll to a hit line.">BASELINE · 4 LANES</a></div>
+  <div class="mappings"><span class="label">music mapping</span><a class="chip" href="pr-8/?mapping=instruments" target="_blank" title="Each move plays a part: block = 808, slash = lead (your synth patch), stab = hats/perc, flourish = vocal chops. A miss mutes or glitches that part.">INSTRUMENTS</a><a class="chip" href="pr-8/?mapping=sword" target="_blank" title="Moves make sword sounds; the song plays as written.">SWORD SFX</a><a class="chip" href="pr-8/?mapping=fx" target="_blank" title="Each move is a mix-wide effect: BLOCK pumps, SLASH sweeps a filter, STAB stutters, FLOURISH lifts into the next bar. Misses fumble the effect.">B · PRODUCER FX</a><a class="chip" href="pr-8/?mapping=hybrid" target="_blank" title="Moves play instruments (808, lead, hats, vocal chops); a clean combo measure fires a production flourish at the bar line.">C · HYBRID</a></div>
+</article>
+</section>
+<div class="tips">
+<b>Comparing music mappings:</b> each chip opens that version with <code>?mapping=&lt;key&gt;</code>; the main menu also has an ACTIONS → MUSIC selector.
+A <code>?mapping=</code> link doesn't change your saved choice.<br>
+<b>Audio:</b> every tab plays its own sound, so pause one version (Esc) before starting another.<br>
+<b>Shared settings:</b> keys, offsets and volumes live in this site's localStorage, so all versions share them.
+</div>
+<footer>generated <time data-t="2026-10-27T15:47:55.656Z">2026-10-27T15:47:55.656Z</time> from <a href="https://github.com/salnad/voxel-rhythm-game">salnad/voxel-rhythm-game</a></footer>
+</main>
+<script>
+const fmt = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+const rel = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' });
+function ago(d) {
+  const s = (d.getTime() - Date.now()) / 1000;
+  for (const [u, n] of [['day', 86400], ['hour', 3600], ['minute', 60]])
+    if (Math.abs(s) >= n) return rel.format(Math.round(s / n), u);
+  return 'just now';
+}
+for (const t of document.querySelectorAll('time[data-t]')) {
+  const d = new Date(t.dataset.t);
+  if (isNaN(d)) continue;
+  t.textContent = ago(d);
+  t.title = fmt.format(d);
+}
+</script>
+</body>
+</html>

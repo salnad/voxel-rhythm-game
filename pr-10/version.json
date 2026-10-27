@@ -1,0 +1,43 @@
+{
+  "slot": "pr-10",
+  "kind": "pr",
+  "status": "archived",
+  "pr": 10,
+  "title": "PRODUCER FX you can hear and see: bolder effects, on-screen feedback, FX RACK, master limiter",
+  "url": "https://github.com/salnad/voxel-rhythm-game/pull/10",
+  "branch": "cursor/producer-fx-felt-f836",
+  "sha": "5e266050aa223ac4f58d06253d1b7e9d236e52fa",
+  "subject": "README: PRODUCER FX visuals, FX RACK, master limiter, fx-audit script",
+  "builtAt": "2026-10-27T14:56:11.622Z",
+  "repo": "salnad/voxel-rhythm-game",
+  "mappings": [
+    {
+      "key": "instruments",
+      "label": "INSTRUMENTS",
+      "description": "Each move plays a part: block = 808, slash = lead (your synth patch), stab = hats/perc, flourish = vocal chops. A miss mutes or glitches that part."
+    },
+    {
+      "key": "sword",
+      "label": "SWORD SFX",
+      "description": "Moves make sword sounds; the song plays as written."
+    },
+    {
+      "key": "fx",
+      "label": "B · PRODUCER FX",
+      "description": "Each move is a mix-wide effect: BLOCK pumps, SLASH sweeps a filter, STAB stutters, FLOURISH lifts into the next bar. Misses fumble the effect."
+    },
+    {
+      "key": "hybrid",
+      "label": "C · HYBRID",
+      "description": "Moves play instruments (808, lead, hats, vocal chops); a clean combo measure fires a production flourish at the bar line."
+    }
+  ],
+  "experiments": [
+    {
+      "key": "baseline",
+      "label": "BASELINE · 4 LANES",
+      "description": "The current game: four lanes on the floor, cues scroll to a hit line."
+    }
+  ],
+  "closedAt": "2026-10-27T14:57:06Z"
+}

@@ -1,0 +1,53 @@
+{
+  "slot": "pr-11",
+  "kind": "pr",
+  "status": "archived",
+  "pr": 11,
+  "title": "Experiments: READ THE ENEMY (tells) and DIRECTIONAL PARRY",
+  "url": "https://github.com/salnad/voxel-rhythm-game/pull/11",
+  "branch": "cursor/diegetic-tells-parry-2234",
+  "sha": "33a3d422bee34f1ad87efe1ac052f02790f192a5",
+  "subject": "docs/experiments.md: document altKeys and the optional ArenaView hooks",
+  "builtAt": "2026-10-27T15:10:10.523Z",
+  "repo": "salnad/voxel-rhythm-game",
+  "mappings": [
+    {
+      "key": "instruments",
+      "label": "INSTRUMENTS",
+      "description": "Each move plays a part: block = 808, slash = lead (your synth patch), stab = hats/perc, flourish = vocal chops. A miss mutes or glitches that part."
+    },
+    {
+      "key": "sword",
+      "label": "SWORD SFX",
+      "description": "Moves make sword sounds; the song plays as written."
+    },
+    {
+      "key": "fx",
+      "label": "B · PRODUCER FX",
+      "description": "Each move is a mix-wide effect: BLOCK pumps, SLASH sweeps a filter, STAB stutters, FLOURISH lifts into the next bar. Misses fumble the effect."
+    },
+    {
+      "key": "hybrid",
+      "label": "C · HYBRID",
+      "description": "Moves play instruments (808, lead, hats, vocal chops); a clean combo measure fires a production flourish at the bar line."
+    }
+  ],
+  "experiments": [
+    {
+      "key": "baseline",
+      "label": "BASELINE · 4 LANES",
+      "description": "The current game: four lanes on the floor, cues scroll to a hit line."
+    },
+    {
+      "key": "tells",
+      "label": "TELLS · READ THE ENEMY",
+      "description": "No highway, no icons: the enemy’s wind-up is the cue, always one beat before the hit."
+    },
+    {
+      "key": "parry",
+      "label": "PARRY · DIRECTIONAL DEFLECTS",
+      "description": "Every cue is a strike from a side: press that direction on the beat to deflect it."
+    }
+  ],
+  "closedAt": "2026-10-27T15:10:28Z"
+}

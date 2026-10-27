@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>VOXEL//RHYTHM</title>
+    <script type="module" crossorigin src="/voxel-rhythm-game/pr-14/assets/main-CStC7oJL.js"></script>
+    <link rel="modulepreload" crossorigin href="/voxel-rhythm-game/pr-14/assets/maps-Tiul_Qy7.js">
+    <link rel="stylesheet" crossorigin href="/voxel-rhythm-game/pr-14/assets/main-Cx4a07T5.css">
+  </head>
+  <body>
+    <div id="app">
+      <canvas id="rain"></canvas>
+      <div id="stage">
+        <canvas id="arena"></canvas>
+        <div id="labels"></div>
+        <canvas id="hud"></canvas>
+        <div id="hud-left" class="hud">
+          <div class="hp">
+            <span>HP</span>
+            <div class="bar"><div id="hp-fill"></div></div>
+          </div>
+          <div class="row"><span>ECHO PARRY</span><span id="parry"></span></div>
+          <div class="row"><span>ENEMIES</span><span id="kills">0</span></div>
+        </div>
+        <div id="hud-right" class="hud">
+          <div id="score">0000000</div>
+          <div class="row"><span>ACC</span><span id="acc">100.00%</span></div>
+          <div class="row"><span>MULT</span><span id="mult">x1</span></div>
+        </div>
+        <div id="synth-mount"></div>
+      </div>
+      <div id="overlay"></div>
+      <div class="scanlines"></div>
+    </div>
+  </body>
+</html>

@@ -1,0 +1,73 @@
+{
+  "slot": "pr-12",
+  "kind": "pr",
+  "status": "archived",
+  "pr": 12,
+  "title": "Experiments: enemy-anchored cues (one lane, Taiko strip, converge, approach ring)",
+  "url": "https://github.com/salnad/voxel-rhythm-game/pull/12",
+  "branch": "cursor/enemy-anchored-cues-1bf1",
+  "sha": "11178d5843a26a9b1922f9dd058ef313f25cc2ad",
+  "subject": "Enemy cues: retune the duel close-up for the rebuilt hero",
+  "builtAt": "2026-10-27T15:21:34.989Z",
+  "repo": "salnad/voxel-rhythm-game",
+  "mappings": [
+    {
+      "key": "instruments",
+      "label": "INSTRUMENTS",
+      "description": "Each move plays a part: block = 808, slash = lead (your synth patch), stab = hats/perc, flourish = vocal chops. A miss mutes or glitches that part."
+    },
+    {
+      "key": "sword",
+      "label": "SWORD SFX",
+      "description": "Moves make sword sounds; the song plays as written."
+    },
+    {
+      "key": "fx",
+      "label": "B · PRODUCER FX",
+      "description": "Each move is a mix-wide effect: BLOCK pumps, SLASH sweeps a filter, STAB stutters, FLOURISH lifts into the next bar. Misses fumble the effect."
+    },
+    {
+      "key": "hybrid",
+      "label": "C · HYBRID",
+      "description": "Moves play instruments (808, lead, hats, vocal chops); a clean combo measure fires a production flourish at the bar line."
+    }
+  ],
+  "experiments": [
+    {
+      "key": "baseline",
+      "label": "BASELINE · 4 LANES",
+      "description": "The current game: four lanes on the floor, cues scroll to a hit line."
+    },
+    {
+      "key": "tells",
+      "label": "TELLS · READ THE ENEMY",
+      "description": "No highway, no icons: the enemy’s wind-up is the cue, always one beat before the hit."
+    },
+    {
+      "key": "parry",
+      "label": "PARRY · DIRECTIONAL DEFLECTS",
+      "description": "Every cue is a strike from a side: press that direction on the beat to deflect it."
+    },
+    {
+      "key": "one-lane",
+      "label": "ONE LANE · COLUMN",
+      "description": "One central lane through the enemy: badge colour and shape say which key."
+    },
+    {
+      "key": "one-lane-strip",
+      "label": "ONE LANE · TAIKO STRIP",
+      "description": "One horizontal track at the enemy’s chest: badges slide onto the enemy, Taiko style."
+    },
+    {
+      "key": "converge",
+      "label": "CONVERGE · BADGES ONTO THE ENEMY",
+      "description": "No lanes: cue badges fly in from around the enemy and land on its chest on the beat."
+    },
+    {
+      "key": "approach-ring",
+      "label": "APPROACH RING · ON THE ENEMY",
+      "description": "No lanes: a ring shrinks onto the spot of the enemy you must hit and closes on the beat."
+    }
+  ],
+  "closedAt": "2026-10-27T15:21:52Z"
+}

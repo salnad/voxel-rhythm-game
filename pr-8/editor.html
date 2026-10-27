@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>VOXEL//RHYTHM map editor</title>
+    <script type="module" crossorigin src="/voxel-rhythm-game/pr-8/assets/editor-CESxDD1h.js"></script>
+    <link rel="modulepreload" crossorigin href="/voxel-rhythm-game/pr-8/assets/maps-BAhST1HH.js">
+    <link rel="stylesheet" crossorigin href="/voxel-rhythm-game/pr-8/assets/editor-DBv_ITf5.css">
+  </head>
+  <body>
+    <div id="ed">
+      <aside id="controls">
+        <h1>MAP EDITOR</h1>
+        <section>
+          <button id="b-demo">load demo (normal)</button>
+          <label
+            >chart .json <input type="file" id="f-chart" accept=".json,application/json"
+          /></label>
+          <label>audio file <input type="file" id="f-audio" accept="audio/*" /></label>
+        </section>
+        <section>
+          <h2>new chart</h2>
+          <label>title <input id="n-title" value="Untitled" /></label>
+          <label>bpm <input id="n-bpm" type="number" value="140" step="0.01" /></label>
+          <label>offset ms <input id="n-offset" type="number" value="0" /></label>
+          <button id="b-new">create (uses loaded audio)</button>
+        </section>
+        <section>
+          <h2>edit</h2>
+          <label
+            >snap
+            <select id="snap">
+              <option value="1">1/1</option>
+              <option value="2">1/2</option>
+              <option value="3">1/3</option>
+              <option value="4" selected>1/4</option>
+              <option value="6">1/6</option>
+              <option value="8">1/8</option>
+            </select></label
+          >
+          <label>zoom <input id="zoom" type="range" min="30" max="400" value="120" /></label>
+          <label class="chk"
+            ><input type="checkbox" id="ticks" checked /> note ticks on playback</label
+          >
+          <div class="btns">
+            <button id="b-play">play / pause [Space]</button>
+            <button id="b-test">playtest in game</button>
+            <button id="b-dl">download chart.json</button>
+          </div>
+          <div id="pos"></div>
+        </section>
+        <section class="help">
+          lanes = block · slash · stab · flourish (one action at a time)<br />
+          click empty cell: add tap · drag up: hold · click note: delete<br />
+          red lines = a new enemy walks in (edit "encounters" in the JSON)<br />
+          wheel: scroll · ctrl+wheel: zoom · Space: play from cursor<br />
+          Edit the JSON on the right (or paste an LLM's chart) and press APPLY.
+        </section>
+        <section id="status"></section>
+      </aside>
+      <main><canvas id="timeline"></canvas></main>
+      <aside id="json">
+        <div class="jhead"><span>chart.json</span><button id="b-apply">APPLY JSON</button></div>
+        <textarea id="text" spellcheck="false"></textarea>
+      </aside>
+    </div>
+  </body>
+</html>
