@@ -71,7 +71,7 @@ const HALF_TIME: readonly Section[] = ['verse', 'break'];
  * Each entry is [normal, easy]; easy must only use hits that normal has. Combo bars (C)
  * leave their last beat empty.
  */
-type BarPattern = readonly [normal: string, easy: string];
+export type BarPattern = readonly [normal: string, easy: string];
 const R = '........';
 const P = {
   rest: [R, R],
@@ -209,20 +209,44 @@ const CHOP_PHRASE: Array<[number, number, number, Vowel]> = [
   [0.75, 0.7, 0, 'o'],
 ];
 
+/** A song built from the digicore instruments: bar patterns plus a section per bar. */
+export interface SongSpec {
+  bars: readonly BarPattern[];
+  sectionOfBar: (bar: number) => Section;
+  /** The section lead rhythm starts at this bar (cue notes always play). */
+  leadFromBar: number;
+  /** Bars where an 8-beat riser starts. */
+  risers: readonly number[];
+  /** Bar of the final chord and lead note. */
+  finalBar: number;
+}
+
+export const DEMO_SONG: SongSpec = {
+  bars: BARS,
+  sectionOfBar,
+  leadFromBar: 6,
+  risers: [22, 46],
+  finalBar: 64,
+};
+
 export function composeDemo(): CompEvent[] {
+  return composeSong(DEMO_SONG);
+}
+
+export function composeSong(spec: SongSpec): CompEvent[] {
   const ev: CompEvent[] = [];
   const add = (e: CompEvent) => ev.push(e);
   let prev808: number | null = null;
 
-  for (let bar = 0; bar < DEMO_BARS; bar++) {
-    const s = sectionOfBar(bar);
+  for (let bar = 0; bar < spec.bars.length; bar++) {
+    const s = spec.sectionOfBar(bar);
     const b0 = bar * 4;
     const ci = bar % 4;
     const chord = CHORDS[ci]!;
     const half = HALF_TIME.includes(s);
     const isDrop = s === 'drop1' || s === 'drop2';
 
-    const [normal, easy] = BARS[bar] ?? P.rest;
+    const [normal, easy] = spec.bars[bar] ?? P.rest;
     const hits = parsePattern(normal);
     const easyHits = parsePattern(easy);
     for (const e of easyHits) {
@@ -260,7 +284,7 @@ export function composeDemo(): CompEvent[] {
 
     // ---- lead (part lead): section rhythm plus every S cue; pitches climb the chord ladder
     const leadOn = new Set<number>();
-    const rhythm = bar >= 6 ? LEAD_RHYTHM[s] : undefined;
+    const rhythm = bar >= spec.leadFromBar ? LEAD_RHYTHM[s] : undefined;
     if (rhythm) for (let i = 0; i < 8; i++) if (rhythm[i] === 'x') leadOn.add(i * 0.5);
     for (const h of hits) if (h.char === 'S') leadOn.add(h.beat);
     const onsets = [...leadOn].sort((a, b) => a - b);
@@ -372,7 +396,7 @@ export function composeDemo(): CompEvent[] {
         });
       }
     }
-    if (bar === 22 || bar === 46)
+    if (spec.risers.includes(bar))
       add({ inst: 'riser', part: 'backing', beat: b0, len: 8, midi: [], vel: 0.8 });
     if (isDrop && bar % 4 === 3) {
       for (const g of [3.5, 3.625, 3.75, 3.875]) {
@@ -389,8 +413,9 @@ export function composeDemo(): CompEvent[] {
   }
 
   // final chord under the last crash
-  add({ inst: 'pad', part: 'backing', beat: 64 * 4, len: 6, midi: CHORDS[0]!, vel: 0.8 });
-  add({ inst: 'lead', part: 'lead', beat: 64 * 4, len: 2, midi: [86], vel: 0.8 });
+  const end = spec.finalBar * 4;
+  add({ inst: 'pad', part: 'backing', beat: end, len: 6, midi: CHORDS[0]!, vel: 0.8 });
+  add({ inst: 'lead', part: 'lead', beat: end, len: 2, midi: [86], vel: 0.8 });
 
   ev.sort((a, b) => a.beat - b.beat);
   return ev;

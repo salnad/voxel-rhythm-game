@@ -1,6 +1,7 @@
 import type { Action } from '../../chart/types';
 import type { DuelAction } from '../../combat/director';
-import { composeDemo, leadNotesByBar } from '../demo/composition';
+import { leadNotesByBar } from '../demo/composition';
+import { songEvents } from '../songs';
 import { leadBus } from '../demo/render';
 import { playLeadNote } from '../leadVoice';
 import type { ActionMusicLayer, MusicLayerFactory } from '../musicLayers';
@@ -48,7 +49,8 @@ export const hybridLayer: MusicLayerFactory = ({ ctx, engine, sfx, chart, sessio
     return { level, crush, dry, mute };
   };
 
-  const liveLead = chart.file.audio.procedural === 'digicore-demo' && engine.parts.has('lead');
+  const songEv = songEvents(chart.file.audio.procedural);
+  const liveLead = songEv !== null && engine.parts.has('lead');
   for (const [name, part] of engine.parts) {
     part.disconnect();
     rerouted.push(part);
@@ -68,7 +70,7 @@ export const hybridLayer: MusicLayerFactory = ({ ctx, engine, sfx, chart, sessio
     const leadLevel = ctx.createGain();
     leadBus(ctx, leadIn, leadLevel, spb);
     voices.set('lead', makeVoice(leadLevel, leadLevel.gain, true));
-    scheduler = new LeadScheduler(chart, leadNotesByBar(composeDemo(), chart.beatsPerBar));
+    scheduler = new LeadScheduler(chart, leadNotesByBar(songEv!, chart.beatsPerBar));
   }
 
   const voiceFor = (action: Action): PartVoice | undefined =>

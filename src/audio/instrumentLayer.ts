@@ -1,7 +1,8 @@
 import type { Action } from '../chart/types';
 import { INSTRUMENT_BINDINGS, INSTRUMENT_TUNING as T } from '../config/instrumentMapping';
 import { boom808, hatRoll, vocalChop } from './accents';
-import { composeDemo, demoHarmony, leadNotesByBar, type CompEvent } from './demo/composition';
+import { demoHarmony, leadNotesByBar, type CompEvent } from './demo/composition';
+import { songEvents } from './songs';
 import { playLeadNote } from './leadVoice';
 import type { MusicLayerFactory } from './musicLayers';
 import { PartGates } from './partGates';
@@ -35,7 +36,7 @@ export const instrumentLayer: MusicLayerFactory = ({ ctx, engine, chart, session
   const spb = 60 / chart.tempo.bpmAtBeat(0);
   const gates = new PartGates(INSTRUMENT_BINDINGS, T.maxMuteBars * spb * chart.beatsPerBar);
   const chains = new Map<string, PartChain>();
-  const demo = chart.file.audio.procedural === 'digicore-demo';
+  const songEv = songEvents(chart.file.audio.procedural);
   const fallbackPart = engine.parts.has('mix') ? 'mix' : null;
 
   const chainFor = (name: string): PartChain | null => {
@@ -68,8 +69,9 @@ export const instrumentLayer: MusicLayerFactory = ({ ctx, engine, chart, session
 
   // the live lead replaces the rendered lead stem
   const leadPart = INSTRUMENT_BINDINGS.slash.part;
-  const liveLead = T.liveLead && demo && chains.has(leadPart);
-  const leadByBar: CompEvent[][] = liveLead ? leadNotesByBar(composeDemo(), chart.beatsPerBar) : [];
+  const liveLead = T.liveLead && songEv !== null && chains.has(leadPart);
+  const leadByBar: CompEvent[][] =
+    liveLead && songEv ? leadNotesByBar(songEv, chart.beatsPerBar) : [];
   if (liveLead) engine.parts.get(leadPart)!.gain.value = 0;
   const scheduledPlays = new Set<string>();
 
@@ -124,7 +126,7 @@ export const instrumentLayer: MusicLayerFactory = ({ ctx, engine, chart, session
     if (!c) return;
     const now = ctx.currentTime;
     const bar = session.conductor.playAt(t)?.bar ?? 0;
-    const h = demo
+    const h = songEv
       ? demoHarmony(bar)
       : { root808: 38, leadTones: [74, 78, 81, 86], chord: [62, 66, 69, 74] };
     const top = Math.max(...h.chord);

@@ -41,6 +41,8 @@ export interface VersionInfo {
   closedAt?: string;
   repo: string;
   mappings: MappingInfo[];
+  /** Gameplay experiments (absent in versions built before they existed). */
+  experiments?: MappingInfo[];
 }
 
 /** The subset of the GitHub pulls API the hub reads. */
@@ -173,6 +175,14 @@ function card(v: VersionInfo): string {
         )
         .join('')}</div>`
     : '';
+  const experiments = v.experiments?.length
+    ? `<div class="mappings"><span class="label">experiments</span><a class="chip lab" href="${play}?lab=1" target="_blank" title="Rate every experiment in a guided sequence">PLAYTEST LAB</a>${v.experiments
+        .map(
+          (m) =>
+            `<a class="chip" href="${play}?exp=${encodeURIComponent(m.key)}" target="_blank" title="${esc(m.description)}">${esc(m.label)}</a>`,
+        )
+        .join('')}</div>`
+    : '';
   const closed = v.closedAt
     ? ` · merged <time data-t="${esc(v.closedAt)}">${esc(v.closedAt)}</time>`
     : '';
@@ -184,6 +194,7 @@ function card(v: VersionInfo): string {
     ${v.kind === 'main' ? `<span class="subject">${esc(headline(v.subject))}</span>` : ''}
   </div>
   <div class="meta">built <time data-t="${esc(v.builtAt)}">${esc(v.builtAt)}</time>${closed} · <a href="${play}editor.html" target="_blank">map editor</a> · <code class="path">/${esc(v.slot)}/</code></div>
+  ${experiments}
   ${mappings}
 </article>`;
 }
@@ -237,6 +248,7 @@ h3 { margin:0; font-size:15px; color:var(--w); font-weight:600; }
 .mappings .label { color:var(--g-mid); font-size:12px; margin-right:4px; }
 .chip { border:1px solid var(--g-mid); color:var(--g); padding:2px 8px; text-decoration:none; font-size:12px; }
 .chip:hover { border-color:var(--g); color:var(--w); background:var(--g-dim); }
+.chip.lab { border-color:var(--g); color:var(--w); }
 .tips { border:1px dashed var(--g-dim); padding:10px 14px; color:var(--g-mid); font-size:12px; margin-top:32px; }
 .tips b { color:var(--w); font-weight:600; }
 footer { color:var(--g-dim); font-size:12px; margin-top:24px; }
@@ -363,6 +375,7 @@ function main(argv: string[]) {
       builtAt: new Date().toISOString(),
       repo: env('GITHUB_REPOSITORY'),
       mappings: readJson<MappingInfo[]>(process.env.HUB_MAPPINGS_JSON, []),
+      experiments: readJson<MappingInfo[]>(process.env.HUB_EXPERIMENTS_JSON, []),
     };
     writeFileSync(join(dir, 'version.json'), JSON.stringify(v, null, 2) + '\n');
   } else if (cmd === 'update') {

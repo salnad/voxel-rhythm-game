@@ -73,11 +73,21 @@ export async function renderDemoStems(
   sampleRate = 44100,
   leadPatch = SONG_LEAD_PATCH,
 ): Promise<Stems> {
-  const spb = 60 / DEMO_BPM;
-  const duration = DEMO_LENGTH_BEATS * spb + 2;
+  return renderSongStems(composeDemo(), DEMO_BPM, DEMO_LENGTH_BEATS, sampleRate, leadPatch);
+}
+
+/** Render any composition built from the digicore instruments as one stem per part. */
+export async function renderSongStems(
+  events: readonly CompEvent[],
+  bpm: number,
+  lengthBeats: number,
+  sampleRate = 44100,
+  leadPatch = SONG_LEAD_PATCH,
+): Promise<Stems> {
+  const spb = 60 / bpm;
+  const duration = lengthBeats * spb + 2;
   const frames = Math.ceil(duration * sampleRate);
   const T = (beat: number) => beat * spb;
-  const events = composeDemo();
 
   const voices = new Map<string, Promise<AudioBuffer>>();
   const keyed = events.map((e) => {

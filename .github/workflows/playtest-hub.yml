@@ -89,6 +89,7 @@ jobs:
         working-directory: game
         env:
           VITE_BASE: ${{ env.HUB_BASE }}${{ matrix.slot }}/
+          VITE_BUILD_ID: ${{ matrix.ref }}
         run: npx vite build
       - name: List music mappings
         working-directory: game
@@ -96,6 +97,12 @@ jobs:
           npx tsx ../hub/scripts/hub/list-mappings.ts src/config/musicMapping.ts > "$RUNNER_TEMP/mappings.json" \
             || echo '[]' > "$RUNNER_TEMP/mappings.json"
           cat "$RUNNER_TEMP/mappings.json"
+      - name: List gameplay experiments
+        working-directory: game
+        run: |
+          npx tsx ../hub/scripts/hub/list-experiments.ts src/experiments/registry.ts > "$RUNNER_TEMP/experiments.json" \
+            || echo '[]' > "$RUNNER_TEMP/experiments.json"
+          cat "$RUNNER_TEMP/experiments.json"
       - name: Stamp version.json
         env:
           HUB_SLOT: ${{ matrix.slot }}
@@ -106,6 +113,7 @@ jobs:
           HUB_BRANCH: ${{ matrix.branch }}
           HUB_SHA: ${{ matrix.ref }}
           HUB_MAPPINGS_JSON: ${{ runner.temp }}/mappings.json
+          HUB_EXPERIMENTS_JSON: ${{ runner.temp }}/experiments.json
         run: |
           export HUB_SUBJECT="$(git -C game log -1 --format=%s)"
           node hub/scripts/hub/site.ts stamp game/dist

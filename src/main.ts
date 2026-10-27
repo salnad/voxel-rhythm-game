@@ -15,9 +15,13 @@ import {
   type LoadedMap,
   type MapIndexEntry,
 } from './game/maps';
+import { loadExperimentMap } from './experiments/load';
+import { EXPERIMENTS, experimentByKey } from './experiments/registry';
+import type { Experiment } from './experiments/types';
 import { PlayRunner } from './game/runner';
 import type { GameSession } from './game/session';
 import { DigitalRain } from './render/rain';
+import { PlaytestLab } from './ui/lab';
 import { SynthPanel } from './ui/synthPanel';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -52,6 +56,8 @@ const sfx = new Sfx(player.ctx);
 const rain = new DigitalRain($('rain'));
 let runner: PlayRunner | null = null;
 let lastMap: LoadedMap | null = null;
+/** The experiment of the last play (null for a regular map). */
+let lastExp: Experiment | null = null;
 let autoplay = params.get('autoplay') === '1';
 /** `?failbars=41,57`: autoplay misses once on the first try of these bars (demo a retry). */
 const autoplayFailBars = (params.get('failbars') ?? '').split(',').filter(Boolean).map(Number);
@@ -103,6 +109,83 @@ function mappingSelector(): string {
     </div>`;
 }
 
+function experimentsBlock(): string {
+  return `<div class="experiments">
+      <div class="mapping-head">GAMEPLAY EXPERIMENTS <button class="big" id="b-lab">PLAYTEST LAB</button></div>
+      <div class="exp-opts">${EXPERIMENTS.map(
+        (e) =>
+          `<button class="exp-opt" data-exp="${esc(e.key)}" title="${esc(e.tagline)}"><b>${esc(e.label)}</b><span>${esc(e.tagline)}</span></button>`,
+      ).join('')}</div>
+    </div>`;
+}
+
+/** Show an experiment's 10-second how-to (preloading its song meanwhile), then play it. */
+async function runExperiment(exp: Experiment, header: string, onBack: () => void) {
+  screen = 'other';
+  await player.resumeContext();
+  const mapP = loadExperimentMap(exp);
+  mapP.catch(() => undefined);
+  const legend = exp.options?.keyLegend ?? settings.keys4.map(keyLabel).join(' ');
+  let left = HOWTO_SECONDS;
+  const el = show(`
+    <div class="sub">${esc(header)}</div>
+    <h2>${esc(exp.label)}</h2>
+    <div class="sub">${esc(exp.tagline)}</div>
+    <div class="howto"><div class="howto-keys">${esc(legend)}</div>
+      <ul>${exp.howTo.map((l) => `<li>${esc(l)}</li>`).join('')}</ul></div>
+    <div class="howto-count">starting in <b id="h-left">${left}</b> · <kbd>Space</kbd> start now · <kbd>Esc</kbd> back</div>`);
+  let done = false;
+  const go = async (start: boolean) => {
+    if (done) return;
+    done = true;
+    clearInterval(timer);
+    window.removeEventListener('keydown', onKey, true);
+    if (!start) return onBack();
+    if (!el.isConnected) return;
+    show('<h2>LOADING</h2><div class="sub">rendering audio…</div>');
+    try {
+      const map = await mapP;
+      lastMap = map;
+      startPlay(map, exp);
+    } catch (e) {
+      if (e instanceof MapLoadError) errorScreen(e.message, e.details);
+      else errorScreen(e instanceof Error ? e.message : String(e));
+    }
+  };
+  const timer = setInterval(() => {
+    left--;
+    const n = el.querySelector('#h-left');
+    if (n) n.textContent = String(left);
+    if (left <= 0) void go(true);
+  }, 1000);
+  const onKey = (e: KeyboardEvent) => {
+    if (e.code === 'Space' || e.code === 'Enter') {
+      e.preventDefault();
+      e.stopPropagation();
+      void go(true);
+    } else if (e.code === 'Escape') {
+      e.stopPropagation();
+      void go(false);
+    }
+  };
+  window.addEventListener('keydown', onKey, true);
+}
+
+const HOWTO_SECONDS = 10;
+
+const lab = new PlaytestLab({
+  show,
+  offScreen: () => {
+    runner?.stop();
+    runner = null;
+    screen = 'other';
+  },
+  runTrial: (exp, header, onBack) => void runExperiment(exp, header, onBack),
+  menu: () => void menu(),
+  calibrate: () => void calibrate(),
+  build: __BUILD_ID__,
+});
+
 function musicMappingLabel(key: string): string {
   return MUSIC_MAPPINGS[key]?.label ?? key;
 }
@@ -128,6 +211,7 @@ async function menu(): Promise<void> {
   const el = show(`
     <h1>VOXEL//RHYTHM</h1>
     <div class="sub">one enemy at a time. four keys. every key is a sword move.</div>
+    ${experimentsBlock()}
     ${mappingSelector()}
     <div class="maps">
       ${maps
@@ -162,6 +246,13 @@ async function menu(): Promise<void> {
   el.querySelectorAll<HTMLButtonElement>('button[data-map]').forEach((b) => {
     b.onclick = () => playBuiltin(b.dataset.map!, b.dataset.file!);
   });
+  el.querySelectorAll<HTMLButtonElement>('button[data-exp]').forEach((b) => {
+    b.onclick = () => {
+      const exp = experimentByKey(b.dataset.exp);
+      if (exp) runExperiment(exp, 'EXPERIMENT', () => void menu());
+    };
+  });
+  $('b-lab').onclick = () => lab.home();
   bindMappingSelector(el);
   $<HTMLInputElement>('c-auto').onchange = (e) =>
     (autoplay = (e.target as HTMLInputElement).checked);
@@ -190,7 +281,7 @@ async function playBuiltin(id: string, file: string) {
   await load(() => loadBuiltinMap(player.ctx, id, file));
 }
 
-async function load(fn: () => Promise<LoadedMap>) {
+async function load(fn: () => Promise<LoadedMap>, exp: Experiment | null = null) {
   screen = 'other';
   await player.resumeContext();
   show('<h2>LOADING</h2><div class="sub">jacking in… rendering audio</div>');
@@ -198,7 +289,7 @@ async function load(fn: () => Promise<LoadedMap>) {
     const map = await fn();
     lastMap = map;
     if (map.warnings.length) console.warn('chart warnings:\n' + map.warnings.join('\n'));
-    startPlay(map);
+    startPlay(map, exp);
   } catch (e) {
     if (e instanceof MapLoadError) errorScreen(e.message, e.details);
     else errorScreen(e instanceof Error ? e.message : String(e));
@@ -207,7 +298,8 @@ async function load(fn: () => Promise<LoadedMap>) {
 
 // ------------------------------------------------------------------ play
 
-function startPlay(map: LoadedMap) {
+function startPlay(map: LoadedMap, exp: Experiment | null = null) {
+  lastExp = exp;
   runner?.stop();
   hide();
   synth.toggle(false);
@@ -221,7 +313,7 @@ function startPlay(map: LoadedMap) {
     rain,
     settings,
     synth.patch,
-    { autoplay, autoplayFailBars },
+    { autoplay, autoplayFailBars, experiment: exp },
     { onFrame: hud, onEnd: results },
   );
   runner.start();
@@ -254,7 +346,8 @@ function pause() {
     <button class="big" id="p-quit">QUIT</button>
     <div class="help">Audio offset ${settings.audioOffsetMs} ms · tweak the synth now, it applies on resume.</div>`);
   el.querySelector<HTMLButtonElement>('#p-resume')!.onclick = resume;
-  el.querySelector<HTMLButtonElement>('#p-restart')!.onclick = () => lastMap && startPlay(lastMap);
+  el.querySelector<HTMLButtonElement>('#p-restart')!.onclick = () =>
+    lastMap && startPlay(lastMap, lastExp);
   el.querySelector<HTMLButtonElement>('#p-quit')!.onclick = quit;
 }
 
@@ -271,10 +364,17 @@ function quit() {
   runner?.stop();
   runner = null;
   idleRaf = requestAnimationFrame(idle);
-  void menu();
+  if (lab.active) lab.trialQuit();
+  else void menu();
 }
 
 function results(s: GameSession, failed: boolean) {
+  if (lab.active) {
+    synth.toggle(true);
+    idleRaf = requestAnimationFrame(idle);
+    lab.trialEnded(s);
+    return;
+  }
   screen = 'results';
   const sc = s.score;
   const mean = sc.meanOffsetMs;
@@ -282,7 +382,7 @@ function results(s: GameSession, failed: boolean) {
   const el = show(`
     <div class="grade">${failed ? 'F' : sc.grade}</div>
     <h2>${failed ? 'SYSTEM FAILURE' : 'TRACK CLEAR'}</h2>
-    <div class="sub">${esc(s.chart.file.meta.title)} · ${esc(s.chart.file.meta.difficulty ?? '')} · ${esc(musicMappingLabel(settings.musicMapping))}${autoplay ? ' · AUTOPLAY' : ''}</div>
+    <div class="sub">${lastExp ? `${esc(lastExp.label)} · ` : ''}${esc(s.chart.file.meta.title)} · ${esc(s.chart.file.meta.difficulty ?? '')} · ${esc(musicMappingLabel(lastExp?.options?.musicMapping ?? settings.musicMapping))}${autoplay ? ' · AUTOPLAY' : ''}</div>
     <div class="stats">
       <div>SCORE</div><div>${sc.score}</div>
       <div>ACCURACY</div><div>${(sc.accuracy * 100).toFixed(2)}%</div>
@@ -295,7 +395,8 @@ function results(s: GameSession, failed: boolean) {
     </div>
     ${!autoplay && Math.abs(mean) > 8 ? `<div class="help">Your hits average ${mean.toFixed(0)} ms ${mean > 0 ? 'late' : 'early'}. <button class="btn" id="r-apply">set audio offset to ${suggest} ms</button></div>` : ''}
     <div style="margin-top:16px"><button class="big" id="r-retry">RETRY [R]</button><button class="big" id="r-menu">MENU [Esc]</button></div>`);
-  el.querySelector<HTMLButtonElement>('#r-retry')!.onclick = () => lastMap && startPlay(lastMap);
+  el.querySelector<HTMLButtonElement>('#r-retry')!.onclick = () =>
+    lastMap && startPlay(lastMap, lastExp);
   el.querySelector<HTMLButtonElement>('#r-menu')!.onclick = quit;
   const apply = el.querySelector<HTMLButtonElement>('#r-apply');
   if (apply)
@@ -467,7 +568,7 @@ window.addEventListener('keydown', (e) => {
     else if (screen === 'pause') resume();
     else if (screen === 'results') quit();
   }
-  if (e.code === 'KeyR' && screen === 'results' && lastMap) startPlay(lastMap);
+  if (e.code === 'KeyR' && screen === 'results' && lastMap) startPlay(lastMap, lastExp);
 });
 window.addEventListener('blur', () => {
   if (screen === 'play' && !autoplay) pause();
@@ -476,6 +577,16 @@ window.addEventListener('blur', () => {
 // ------------------------------------------------------------------ boot
 
 async function boot() {
+  if (params.get('lab') === '1') return lab.home();
+  const expKey = params.get('exp');
+  if (expKey) {
+    const exp = experimentByKey(expKey);
+    if (!exp) return errorScreen(`This version has no experiment "${expKey}".`);
+    if (params.get('autostart') === '1') {
+      return load(() => loadExperimentMap(exp), exp);
+    }
+    return runExperiment(exp, 'EXPERIMENT', () => void menu());
+  }
   const map = params.get('map');
   if (map === 'editor') {
     await load(async () => {

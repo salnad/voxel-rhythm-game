@@ -2,7 +2,7 @@ import type { Chart } from '../chart/build';
 import { resolveJudgement, type DuelAction } from '../combat/director';
 import { DuelSim, type DuelEvent } from '../combat/duel';
 import type { TelegraphCue } from '../combat/telegraph';
-import { JUDGEMENT_WINDOWS } from '../config/gameplay';
+import { JUDGEMENT_WINDOWS, type JudgementWindows } from '../config/gameplay';
 import { EventBus } from '../core/events';
 import type { LaneInput } from '../rhythm/input';
 import { Judge, type JudgementEvent } from '../rhythm/judge';
@@ -62,10 +62,10 @@ export class GameSession {
 
   constructor(
     readonly chart: Chart,
-    opts: { noFail: boolean; patch?: SynthPatch },
+    opts: { noFail: boolean; patch?: SynthPatch; windows?: JudgementWindows },
   ) {
     this.conductor = new Conductor(chart);
-    this.judge = new Judge([], chart.lanes.length, JUDGEMENT_WINDOWS);
+    this.judge = new Judge([], chart.lanes.length, opts.windows ?? JUDGEMENT_WINDOWS);
     this.duel = new DuelSim(chart, opts.noFail, (k) => this.encounterStart(k));
     this.patch = { ...(opts.patch ?? DEFAULT_PATCH) };
     this.mods = deriveModifiers(this.patch);
