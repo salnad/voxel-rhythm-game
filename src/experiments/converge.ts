@@ -1,9 +1,9 @@
-import { ACTIONS } from '../chart/types';
+import { ACTIONS, type Action } from '../chart/types';
 import { ACTION_SPECS } from '../config/actions';
 import { keyLabel } from '../core/settings';
 import type { Cue } from '../game/conductor';
 import { hexA } from '../render/icons';
-import { drawBadge, drawImpact } from './enemyCues/draw';
+import { drawBadge, drawDroppedBadge, drawImpact } from './enemyCues/draw';
 import {
   clamp01,
   convergeOffset,
@@ -28,6 +28,8 @@ const BADGE_PX = 23;
 const STOP = { perfect: 0.055, other: 0.03 };
 const BURST_LIFE = 0.24;
 const LINGER = 0.5;
+const ORBIT_MAX = 12;
+const ORBIT_R = 46;
 
 interface Impact {
   x: number;
@@ -43,6 +45,9 @@ class ConvergeRuntime implements ExperimentRuntime {
   private readonly impacts: Impact[] = [];
   private target: { x: number; y: number; ppu: number } | null = null;
   private lastTarget = { x: 0, y: 0, ppu: 100 };
+  /** Landed badges stick and orbit the chest (success builds up); a miss knocks them off. */
+  private readonly orbit: Array<{ action: Action; at: number }> = [];
+  private readonly offDuel: () => void;
 
   constructor(private readonly ctx: ExperimentContext) {
     this.stage = new EnemyCueStage(ctx, { framing: DUEL_CLOSEUP, linger: LINGER });
@@ -52,13 +57,38 @@ class ConvergeRuntime implements ExperimentRuntime {
       this.stage.pop(tg.x - 95, tg.y + 10, outcome);
       if (outcome.judgement === 'miss') {
         this.stage.shards.crack(tg.x, tg.y, cue.action, BADGE_PX);
+        this.scatterOrbit('#5d6b63', 160);
         return;
       }
+      this.orbit.push({ action: cue.action, at: this.stage.now });
+      if (this.orbit.length > ORBIT_MAX) this.orbit.shift();
       const color = ACTION_SPECS[cue.action].color;
       const perfect = outcome.judgement === 'perfect';
       this.impacts.push({ x: tg.x, y: tg.y, r: perfect ? 46 : 34, color, at: this.stage.now });
       this.stage.shards.burst(tg.x, tg.y, color, perfect ? 24 : 14, perfect ? 440 : 320, 5);
     };
+    this.offDuel = ctx.session.bus.on('duel', (d) => {
+      if (d.type === 'defeated') this.scatterOrbit(null, 520);
+      else if (d.type === 'enemyEnter' || d.type === 'escaped') this.orbit.length = 0;
+    });
+  }
+
+  /** Knock the stuck badges off: grey on a miss, a coloured blast when the enemy falls. */
+  private scatterOrbit(color: string | null, speed: number) {
+    const tg = this.lastTarget;
+    this.orbit.forEach((o, i) => {
+      const at = this.orbitPos(i, this.stage.now, tg.x, tg.y);
+      this.stage.shards.burst(at.x, at.y, color ?? ACTION_SPECS[o.action].color, 4, speed, 5);
+    });
+    this.orbit.length = 0;
+  }
+
+  private orbitPos(i: number, t: number, x: number, y: number) {
+    const o = this.orbit[i]!;
+    const grow = easeOut((t - o.at) / 0.15);
+    const a = (i / ORBIT_MAX) * Math.PI * 2 + t * 1.3;
+    const r = ORBIT_R * grow;
+    return { x: x + Math.cos(a) * r, y: y + Math.sin(a) * r * 0.8 };
   }
 
   update(t: number, dt: number, approach: number): void {
@@ -77,6 +107,11 @@ class ConvergeRuntime implements ExperimentRuntime {
       this.drawBeatRings(c, t, tg.x, tg.y, R);
       this.drawReticle(c, t, tg.x, tg.y, staged);
     }
+    if (this.target)
+      this.orbit.forEach((o, i) => {
+        const p = this.orbitPos(i, t, tg.x, tg.y);
+        drawBadge(c, o.action, p.x, p.y, 6, { glow: 6 });
+      });
     // far badges first so the next one draws on top
     for (let i = staged.length - 1; i >= 0; i--) this.drawCue(c, staged[i]!, t, tg.x, tg.y, R);
     for (let i = this.impacts.length - 1; i >= 0; i--) {
@@ -87,7 +122,7 @@ class ConvergeRuntime implements ExperimentRuntime {
       }
       drawImpact(c, im.x, im.y, im.r, im.color, kick(t - im.at, 0.2));
     }
-    if (this.target) this.stage.drawCombo(c, tg.x + Math.max(120, w * 0.13), tg.y + 40);
+    if (this.target) this.stage.drawCombo(c, tg.x + 70, tg.y + Math.max(110, h * 0.17));
     this.stage.drawOverlay(c, t, w, h);
   }
 
@@ -208,11 +243,16 @@ class ConvergeRuntime implements ExperimentRuntime {
       });
       return;
     }
+    if (s.stage === 'void') {
+      const o = convergeOffset(Math.max(0, s.tau + s.age), A, angle, R, CURL);
+      drawDroppedBadge(c, action, x + o.x, y + o.y, BADGE_PX, s.age, LINGER);
+      return;
+    }
     // miss: the badge cracked on the enemy (shards); a red cross marks the spot
     const k = clamp01(s.age / LINGER);
     c.save();
     c.globalAlpha = Math.max(0, 0.6 - k * 3);
-    c.strokeStyle = s.stage === 'miss' ? '#ff3b5c' : '#5d6b63';
+    c.strokeStyle = '#ff3b5c';
     c.lineWidth = 3;
     c.beginPath();
     c.moveTo(x - 10, y - 10);
@@ -224,8 +264,10 @@ class ConvergeRuntime implements ExperimentRuntime {
   }
 
   dispose(): void {
+    this.offDuel();
     this.stage.dispose();
     this.impacts.length = 0;
+    this.orbit.length = 0;
   }
 }
 

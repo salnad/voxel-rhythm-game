@@ -30,9 +30,10 @@ const RING_FROM = 3.2;
 const GHOSTS = [0.34, 0.14];
 /** Hit-stop on the burst (s) for perfect / other hits. */
 const STOP = { perfect: 0.055, other: 0.03 };
-const BURST_LIFE = 0.26;
+const BURST_LIFE = 0.2;
 const CRACK_LIFE = 0.42;
 const SLASH_MINOR = 0.32;
+const RIPPLE_LIFE = 0.16;
 
 /** A target in screen space: a circle, a slanted ellipse (slash) or a projected floor ring. */
 interface Shape {
@@ -62,6 +63,7 @@ class ApproachRingRuntime implements ExperimentRuntime {
   private approach = 1;
   private readonly impacts: Array<{ x: number; y: number; r: number; color: string; at: number }> =
     [];
+  private readonly ripples: Array<{ action: Action; at: number }> = [];
 
   constructor(private readonly ctx: ExperimentContext) {
     this.stage = new EnemyCueStage(ctx, { framing: DUEL_CLOSEUP, linger: CRACK_LIFE });
@@ -70,7 +72,7 @@ class ApproachRingRuntime implements ExperimentRuntime {
       const s = this.shapeFor(cue.action);
       if (!s) return;
       const color = ACTION_SPECS[cue.action].color;
-      this.stage.pop(s.x, s.y - s.ry * 0.6, outcome);
+      this.stage.pop(s.x - s.r - 56, s.y + 10, outcome);
       if (outcome.judgement === 'miss') {
         this.stage.shards.burst(s.x, s.y, '#5d6b63', 6, 120, 3);
         return;
@@ -78,6 +80,11 @@ class ApproachRingRuntime implements ExperimentRuntime {
       const perfect = outcome.judgement === 'perfect';
       this.impacts.push({ x: s.x, y: s.y, r: Math.max(26, s.r * 1.2), color, at: this.stage.now });
       this.stage.shards.burst(s.x, s.y, color, perfect ? 22 : 12, perfect ? 420 : 300, 5);
+    };
+    // every press lights its action's spot, cue or not: teaches key → spot
+    this.stage.onPress = (action, t) => {
+      this.ripples.push({ action, at: t });
+      if (this.ripples.length > 8) this.ripples.shift();
     };
   }
 
@@ -138,6 +145,8 @@ class ApproachRingRuntime implements ExperimentRuntime {
     const staged = this.stage.staged(t, this.approach);
     const alphas = ghostAlphas(staged, GHOSTS);
     // ghosts first (furthest in time at the back), the next cue on top
+    this.drawRipples(c, t);
+    this.drawFollowPoints(c, staged, alphas);
     const order = staged.map((s, i) => ({ s, a: alphas[i]! })).reverse();
     for (const { s, a } of order) this.drawCue(c, s, a, t);
     for (let i = this.impacts.length - 1; i >= 0; i--) {
@@ -152,6 +161,57 @@ class ApproachRingRuntime implements ExperimentRuntime {
     const chest = this.shapeFor('stab');
     if (chest) this.stage.drawCombo(c, chest.x + Math.max(110, w * 0.12), chest.y + 30);
     this.stage.drawOverlay(c, t, w, h);
+  }
+
+  /** A soft flash on the pressed action's spot. */
+  private drawRipples(c: CanvasRenderingContext2D, t: number) {
+    for (const r of this.ripples) {
+      const k = kick(t - r.at, RIPPLE_LIFE);
+      if (k <= 0) continue;
+      const shape = this.shapeFor(r.action);
+      if (!shape) continue;
+      c.save();
+      c.globalAlpha = 0.3 * k;
+      c.fillStyle = ACTION_SPECS[r.action].color;
+      shapePath(c, shape, 1.05 - 0.1 * k);
+      c.fill();
+      c.restore();
+    }
+  }
+
+  /** osu!-style follow points from the next target to the ones after it. */
+  private drawFollowPoints(
+    c: CanvasRenderingContext2D,
+    staged: StagedCue<Cue>[],
+    alphas: number[],
+  ) {
+    let prev: Shape | null = null;
+    c.save();
+    c.fillStyle = '#e6ffe9';
+    staged.forEach((s, i) => {
+      const a = alphas[i]!;
+      if (s.stage !== 'incoming' || a <= 0.01) return;
+      const shape = this.shapeFor(s.cue.action);
+      if (!shape) return;
+      if (prev && Math.hypot(shape.x - prev.x, shape.y - prev.y) > 30) {
+        const n = 5;
+        for (let d = 1; d < n; d++) {
+          const f = d / n;
+          c.globalAlpha = a * 0.9;
+          c.beginPath();
+          c.arc(
+            prev.x + (shape.x - prev.x) * f,
+            prev.y + (shape.y - prev.y) * f,
+            2.2,
+            0,
+            Math.PI * 2,
+          );
+          c.fill();
+        }
+      }
+      prev = shape;
+    });
+    c.restore();
   }
 
   private drawCue(c: CanvasRenderingContext2D, s: StagedCue<Cue>, alpha: number, t: number) {
@@ -211,20 +271,19 @@ class ApproachRingRuntime implements ExperimentRuntime {
       const age = hitStopAge(s.age, stop);
       const k = easeOut(age / BURST_LIFE);
       if (age < BURST_LIFE) {
-        const white = s.age < stop ? 1 : 0;
+        // a lit, filled target (white-hot during the hit-stop) that swells and fades: reads
+        // as a burst, never as another approach ring
+        const lit = s.age < stop;
+        c.globalAlpha = (1 - k) * (lit ? 0.85 : 0.6);
+        c.fillStyle = lit ? '#ffffff' : color;
+        shapePath(c, shape, 1 + k * 0.3);
+        c.fill();
         c.globalAlpha = 1 - k;
-        c.lineWidth = 6 * (1 - k) + 1;
-        c.strokeStyle = white ? '#ffffff' : color;
+        c.lineWidth = 4 * (1 - k) + 1;
+        c.strokeStyle = '#ffffff';
         c.shadowColor = color;
         c.shadowBlur = 18;
-        shapePath(c, shape, 1 + k * 0.7);
         c.stroke();
-        if (white) {
-          c.globalAlpha = 0.55;
-          c.fillStyle = hexA(color, 1);
-          shapePath(c, shape, 1);
-          c.fill();
-        }
       }
     } else {
       // miss or voided: the target cracks into falling arcs
@@ -319,6 +378,7 @@ class ApproachRingRuntime implements ExperimentRuntime {
   dispose(): void {
     this.stage.dispose();
     this.impacts.length = 0;
+    this.ripples.length = 0;
   }
 }
 

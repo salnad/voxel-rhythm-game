@@ -6,7 +6,7 @@ import { keyLabel } from '../core/settings';
 import type { Cue } from '../game/conductor';
 import { COMBO_COLOR, RETRY_COLOR } from '../render/highway3d';
 import { hexA } from '../render/icons';
-import { drawBadge, drawImpact } from './enemyCues/draw';
+import { drawBadge, drawDroppedBadge, drawImpact } from './enemyCues/draw';
 import { clamp01, easeOut, hitStopAge, kick, stripX, type StagedCue } from './enemyCues/logic';
 import { DUEL_CLOSEUP, EnemyCueStage } from './enemyCues/stage';
 import type { Experiment, ExperimentContext, ExperimentRuntime } from './types';
@@ -139,9 +139,9 @@ class OneLaneRuntime implements ExperimentRuntime {
     const nl = this.floor(nearZ, -hw);
     const nr = this.floor(nearZ, hw);
     const grad = c.createLinearGradient(0, fl.y, 0, nl.y);
-    grad.addColorStop(0, 'rgba(0,10,4,0)');
-    grad.addColorStop(0.25, 'rgba(0,14,6,0.55)');
-    grad.addColorStop(1, 'rgba(0,20,8,0.75)');
+    grad.addColorStop(0, 'rgba(57,255,106,0)');
+    grad.addColorStop(0.3, 'rgba(57,255,106,0.07)');
+    grad.addColorStop(1, 'rgba(57,255,106,0.16)');
     c.save();
     c.fillStyle = grad;
     c.beginPath();
@@ -162,7 +162,7 @@ class OneLaneRuntime implements ExperimentRuntime {
       c.lineTo(b.x, b.y);
       c.stroke();
     };
-    for (const s of [-1, 1]) rail(s, farZ, nearZ, 'rgba(200,255,216,0.45)', 1.5);
+    for (const s of [-1, 1]) rail(s, farZ, nearZ, 'rgba(200,255,216,0.7)', 2);
     const beats = this.beats(t, 0.1);
     for (const b of beats) {
       const z = this.columnZ(b.time - t);
@@ -217,6 +217,11 @@ class OneLaneRuntime implements ExperimentRuntime {
         });
       } else if (s.stage === 'hit') {
         this.drawBurst(c, s, gate.x, gate.y, r * 0.85);
+      } else if (s.stage === 'void') {
+        const z = this.columnZ(Math.max(0, s.tau + s.age));
+        const p = this.ctx.arena.toScreen(this.v.set(0, lift, z));
+        const pr = COLUMN.badge * this.stage.screenAt(this.v.set(0, lift, z)).ppu;
+        drawDroppedBadge(c, s.cue.action, p.x, p.y, pr, s.age, LINGER);
       }
     }
   }
@@ -329,6 +334,9 @@ class OneLaneRuntime implements ExperimentRuntime {
         });
       } else if (s.stage === 'hit') {
         this.drawBurst(c, s, dx, y, STRIP.badge);
+      } else if (s.stage === 'void') {
+        const x = stripX(Math.max(0, s.tau + s.age), this.approach, x0, dx);
+        drawDroppedBadge(c, s.cue.action, x, y, STRIP.badge, s.age, LINGER);
       }
     }
   }

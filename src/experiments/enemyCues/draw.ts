@@ -120,6 +120,25 @@ export function drawBadge(c: Ctx, action: Action, x: number, y: number, r: numbe
   c.restore();
 }
 
+/** A cue voided by a failed combo: greys out, tips over and drops away from where it was. */
+export function drawDroppedBadge(
+  c: Ctx,
+  action: Action,
+  x: number,
+  y: number,
+  r: number,
+  age: number,
+  life: number,
+) {
+  const k = Math.min(1, age / life);
+  if (k >= 1) return;
+  c.save();
+  c.translate(x, y + age * age * 900);
+  c.rotate(k * 0.9);
+  drawBadge(c, action, 0, 0, r * (1 - 0.3 * k), { alpha: 1 - k, dead: true, glow: 0 });
+  c.restore();
+}
+
 /** Comic-style impact lines radiating from a contact point. k = 1 at impact, fading to 0. */
 export function drawImpact(c: Ctx, x: number, y: number, r: number, color: string, k: number) {
   if (k <= 0) return;
