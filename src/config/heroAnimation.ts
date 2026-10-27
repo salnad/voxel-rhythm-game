@@ -271,9 +271,9 @@ const stab: MoveClip = {
         swordYaw: 0.12,
         swordPitch: 0.0,
         swordRoll: 0,
-        leftX: 0.3,
-        leftY: 0.16,
-        leftZ: -0.18,
+        leftX: 0.44,
+        leftY: 0.24,
+        leftZ: -0.2,
       },
     },
     {
@@ -290,9 +290,9 @@ const stab: MoveClip = {
         swordYaw: 0.12,
         swordPitch: -0.02,
         swordRoll: 0,
-        leftX: 0.3,
-        leftY: 0.16,
-        leftZ: -0.2,
+        leftX: 0.45,
+        leftY: 0.24,
+        leftZ: -0.22,
       },
     },
     {
@@ -566,7 +566,7 @@ export const HIT_REACT: Key[] = [
       footRZ: -0.04,
     },
   },
-  { t: 0.3, pose: { spinePitch: -0.05, pelvisZ: -0.04, footLZ: -0.06 } },
+  { t: 0.3, pose: { spinePitch: -0.05, pelvisZ: -0.04, footLZ: -0.06, footLLift: 0.05 } },
   { t: 0.42, pose: {} },
 ];
 
