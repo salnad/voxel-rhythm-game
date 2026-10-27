@@ -50,14 +50,6 @@ export const ACTION_SPECS: Record<Action, ActionSpec> = {
   },
 };
 
-/** Hero move animation tuning (seconds / degrees). Synth modifiers scale these. */
-export const MOVES = {
-  block: { raise: 0.05, hold: 0.16, lower: 0.18 },
-  slash: { duration: 0.17, arcDeg: 200, tiltDeg: 28 },
-  stab: { windup: 0.05, thrust: 0.07, hold: 0.08, retract: 0.14, lunge: 0.55 },
-  flourish: { duration: 0.46, spins: 1, arcDeg: 300, tiltDeg: 12, hop: 0.45 },
-};
-
 export interface EnemySpec {
   /** Overall size multiplier. */
   scale: number;

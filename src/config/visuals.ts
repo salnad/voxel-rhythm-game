@@ -55,17 +55,61 @@ export const HUD = {
 
 export const CHARACTER = {
   /** Colors loosely after the low-poly FF7 chibi reference. */
-  skin: '#f2d1b8',
-  hair: '#f5d75a',
-  outfit: '#4b4f8c',
-  outfitDark: '#2f3263',
-  leather: '#9b6b45',
-  metal: '#9aa3ad',
-  metalDark: '#4a5058',
+  skin: '#f4d6bf',
+  hair: '#f7da5e',
+  hairShade: '#d9a933',
+  outfit: '#565c9e',
+  outfitDark: '#343873',
+  leather: '#a8744a',
+  metal: '#a9b2bc',
+  metalDark: '#555c66',
   eyes: '#3fb8a8',
-  blade: '#b9c2cc',
-  bladeEmissive: '#39ff6a',
+  blade: '#c3cbd4',
+  /** Materia slots on the sword. */
+  materia: '#39ff6a',
   scale: 0.92,
+};
+
+/**
+ * Sword effects. The synth still shapes the sword, but every effect is scaled down so the
+ * blade and the moves stay readable. 0 removes an effect; 1 is the raw synth amount.
+ */
+export const SWORD_FX = {
+  /** Blade glow flash on a connect (emissive intensity), and its decay (s). Nothing glows at rest. */
+  hitGlow: 0.35,
+  hitGlowDecay: 0.12,
+  /** Materia slot glow at rest, and how much CUTOFF adds. */
+  materiaGlow: 0.2,
+  materiaCutoffGlow: 0.5,
+  /** How much of the synth's reach (CUTOFF) reaches the blade length. */
+  reachAmount: 0.25,
+  /** How much WT POS widens or narrows slash and flourish arcs. */
+  arcAmount: 0.3,
+  /** How much WT POS changes follow-through speed (saw snappy, sine smooth). */
+  followAmount: 1,
+  /** How much CUTOFF changes the stab lunge. */
+  lungeAmount: 0.4,
+  /** UNISON echo afterimages: at most this many, this opaque, only around the strike. */
+  echoMax: 3,
+  echoOpacity: 0.16,
+  /** Echo spread (DETUNE) and delay scale. */
+  echoSpreadAmount: 0.35,
+  echoDelayAmount: 0.6,
+  /** Blade-lock grinding sparks per second. */
+  grindSparks: 10,
+};
+
+/** Enemy reaction to a landed hit. */
+export const ENEMY_REACT = {
+  /** Freeze on contact (s), matching the hero's hit-stop, with a shudder (rad). */
+  hitStop: 0.05,
+  shudder: 0.05,
+  /** Knockback time (s) and overshoot (back-ease constant). */
+  knockback: 0.09,
+  overshoot: 1.4,
+  /** Body flash intensity and decay (s). */
+  flash: 0.5,
+  flashDecay: 0.14,
 };
 
 export const RAIN = {
@@ -78,11 +122,15 @@ export const RAIN = {
 };
 
 export const TRAIL = {
-  lifetime: 0.2,
-  maxSamples: 40,
-  opacity: 0.75,
-  /** Echo-blade trails relative to the main trail. */
-  ghostAlpha: 0.25,
+  lifetime: 0.13,
+  maxSamples: 48,
+  opacity: 0.32,
+  /** Ribbon starts this far along the blade (0 = guard, 1 = tip): a thin arc near the tip. */
+  innerEdge: 0.45,
+  /** WT POS "stepped" jitter (world units at full square wave). */
+  jitter: 0.03,
+  /** Smear samples drawn between the coil and the contact frame on a key press. */
+  smearSamples: 10,
 };
 
 export const RENDER = {

@@ -47,8 +47,11 @@ export class Trail {
     this.color.setHSL((hsl.h + hueShift / 360 + 1) % 1, 1, light);
   }
 
+  /** Add a sample. `stepped` is the jitter amplitude in world units. Samples must arrive in time order. */
   push(b: THREE.Vector3, t: THREE.Vector3, at: number): void {
-    const j = this.stepped * 0.18;
+    const last = this.samples[this.samples.length - 1];
+    if (last && at < last.at) return;
+    const j = this.stepped;
     const jit = () => (Math.random() - 0.5) * j;
     this.samples.push({
       b: b.clone().add(new THREE.Vector3(jit(), jit(), jit())),
@@ -63,10 +66,11 @@ export class Trail {
     const s = this.samples;
     for (let i = 0; i < s.length; i++) {
       const { b, t, at } = s[i]!;
-      const k = Math.max(0, 1 - (now - at) / TRAIL.lifetime) * TRAIL.opacity * this.alpha;
+      const life = Math.max(0, 1 - (now - at) / TRAIL.lifetime);
+      const k = life * life * TRAIL.opacity * this.alpha;
       this.pos.set([b.x, b.y, b.z, t.x, t.y, t.z], i * 6);
       const { r, g, b: bl } = this.color;
-      this.col.set([r, g, bl, k * 0.15, r, g, bl, k], i * 8);
+      this.col.set([r, g, bl, 0, r, g, bl, k], i * 8);
     }
     this.geo.setDrawRange(0, Math.max(0, (s.length - 1) * 6));
     this.geo.attributes.position!.needsUpdate = true;

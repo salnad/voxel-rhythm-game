@@ -6,14 +6,15 @@ import type { DuelEvent } from '../combat/duel';
 import { telegraphAt } from '../combat/telegraph';
 import { ACTION_SPECS, ENEMIES } from '../config/actions';
 import { DUEL } from '../config/gameplay';
-import { ARENA, CAMERA, CHARACTER, PALETTE, RENDER } from '../config/visuals';
+import { HERO_ANIM } from '../config/heroAnimation';
+import { ARENA, CAMERA, CHARACTER, PALETTE, RENDER, SWORD_FX } from '../config/visuals';
 import type { GameSession } from '../game/session';
 import type { LaneInput } from '../rhythm/input';
 import { buildCharacter, type CharacterRig } from './character';
 import { Rings, Voxels } from './effects';
 import { buildEnemy, poseEnemy, type EnemyRig } from './enemy';
 import { FloatingText } from './floatingText';
-import { HeroAnimator } from './heroAnimator';
+import { HeroAnimator, type Anticipation } from './heroAnimator';
 import { Highway3D } from './highway3d';
 
 const UP = new THREE.Vector3(0, 1, 0);
@@ -50,13 +51,14 @@ export class ArenaView {
   private shake = 0;
   private hurtAt = -10;
   private fovPulse = 0;
-  private flashAt = -10;
-  private flashColor = new THREE.Color();
   private lastGrindSpark = 0;
   private readonly walkIn: number;
   private readonly beforeRender: Array<(t: number, dt: number) => void> = [];
   private readonly showHighway: boolean;
   private readonly showEnemyIcon: boolean;
+  /** Seconds the visuals are drawn ahead of game time (Settings → visual offset). */
+  visualOffset = 0;
+  private cueScan = 0;
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
@@ -123,6 +125,7 @@ export class ArenaView {
     blob.position.set(0, 0.02, ARENA.heroZ);
     this.scene.add(blob);
     this.anim = new HeroAnimator(this.scene, this.hero);
+    if (import.meta.env.DEV) (window as unknown as Record<string, unknown>).__hero = this.anim;
 
     this.voxels = new Voxels(this.scene);
     this.rings = new Rings(this.scene);
@@ -235,11 +238,13 @@ export class ArenaView {
     const action = this.chart.lanes[i.lane] as Action | undefined;
     if (!action) return;
     this.held[i.lane] = i.down;
+    // moves start at the input's own time, so the strike lands on the key press
+    const at = i.time + this.visualOffset;
     if (i.down) {
       this.pressAt[i.lane] = this.now;
-      this.anim.start(action, this.now, this.session.mods);
+      this.anim.start(action, at, this.session.mods);
     } else {
-      this.anim.release(this.now);
+      this.anim.release(at);
     }
   }
 
@@ -253,8 +258,6 @@ export class ArenaView {
         this.rings.spawn(p.setY(0.06), ACTION_SPECS[a.action].color, UP, 0.22, 0.7);
       }
     }
-    this.flashAt = this.now;
-    this.flashColor.set(ACTION_SPECS[a.action].color);
   }
 
   private onDuel(d: DuelEvent): void {
@@ -302,6 +305,7 @@ export class ArenaView {
       }
       case 'playerHit':
         this.hurtAt = this.now;
+        this.anim.hurt(this.now);
         this.shake = CAMERA.shakeOnHit;
         this.labels.spawn(
           new THREE.Vector3(0, 2.6, 0),
@@ -362,25 +366,17 @@ export class ArenaView {
     const phase = beat - Math.floor(beat);
     const bob = Math.pow(1 - phase, 3);
 
-    this.anim.update(songTime, mods, this.anim.current ? 0 : bob);
-    this.hero.bladeMaterial.emissiveIntensity = 0.12 + (mods.reach - 0.8) * 1.2 + bob * 0.15;
-    const flash = Math.max(0, 1 - (songTime - this.flashAt) / 0.12);
-    this.hero.bladeMaterial.emissive.set(CHARACTER.bladeEmissive).lerp(this.flashColor, flash);
-    this.hero.bladeMaterial.emissiveIntensity += flash * 1.5;
+    this.anim.update(songTime, mods, bob, this.anticipation(songTime));
 
     // blade-lock sparks
-    if (this.anim.holding && songTime - this.lastGrindSpark > 0.04) {
+    if (this.anim.holding && songTime - this.lastGrindSpark > 1 / SWORD_FX.grindSparks) {
       this.lastGrindSpark = songTime;
-      this.voxels.burst(this.anim.bladeTip(), PALETTE.white, 2, 3, UP, 0.5);
+      this.voxels.burst(this.anim.bladeTip(), PALETTE.white, 1, 2.5, UP, 0.4);
     }
 
-    // hurt flash + knockback
+    // knockback
     const hurt = Math.max(0, 1 - (songTime - this.hurtAt) / 0.3);
-    for (const m of this.hero.materials) {
-      if (m === this.hero.bladeMaterial) continue;
-      m.emissive.setRGB(hurt * 0.9, 0, hurt * 0.15);
-    }
-    this.hero.root.position.z = ARENA.heroZ + hurt * 0.35;
+    this.hero.root.position.z = ARENA.heroZ + hurt * hurt * 0.2;
 
     this.highway.update(
       songTime,
@@ -409,6 +405,30 @@ export class ArenaView {
     for (const fn of this.beforeRender) fn(songTime, dt);
     this.renderer.render(this.scene, this.camera);
     this.labels.update(dt);
+  }
+
+  /** The next cue the hero should coil for: the earliest one still pending. */
+  private anticipation(t: number): Anticipation | null {
+    const cues = this.session.conductor.cues;
+    const judge = this.session.judge;
+    while (this.cueScan < cues.length) {
+      const c = cues[this.cueScan]!;
+      if ((c.endTime ?? c.time) > t - 2) break;
+      this.cueScan++;
+    }
+    let prev = t - this.anim.sincePress(t);
+    for (let i = this.cueScan; i < cues.length; i++) {
+      const c = cues[i]!;
+      if (c.removed) continue;
+      if (c.time > t + 1) break;
+      if (c.time < t - HERO_ANIM.anticipationRelease || !judge.isPending(c.id)) {
+        prev = Math.max(prev, c.endTime ?? c.time);
+        continue;
+      }
+      const action = this.chart.lanes[c.lane] as Action | undefined;
+      return action ? { action, timeTo: c.time - t, gap: c.time - prev } : null;
+    }
+    return null;
   }
 
   private rigFor(encounter: number): EnemyRig {

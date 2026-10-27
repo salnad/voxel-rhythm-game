@@ -152,9 +152,20 @@ keyboard / touch / autoplay
 - **Rendering is reactive.** The views read session state and subscribe to bus events. They never
   change game state. `render/heroAnimator.ts` plays a move on every key press;
   `render/enemy.ts` poses the enemy from the telegraph; `render/highway3d.ts` draws the lanes.
+- **Hero animation is keyframe data** (`src/config/heroAnimation.ts`, sampled by `render/heroPose.ts`).
+  Each move is a clip timed from its contact frame: t = 0 is the key press (stamped with the input's
+  own time), so the strike lands exactly on input and the swing that led there is drawn as a smear.
+  Keys before 0 are the anticipation, which the hero coils into while the next cue approaches on the
+  highway; keys after 0 are follow-through and recovery. A connect adds a short hit-stop (the enemy
+  freezes and shudders too). A new press interrupts the current move: the blade snaps to the new
+  contact frame while the body blends. Slashes alternate forehand and backhand, and fast chains shrink
+  the hit-stop and arcs so 16ths read as a flurry. The rig (`render/character.ts`) is a low-poly chibi
+  with two-bone IK arms and legs, so poses are hand and blade targets rather than joint angles.
 - **Tuning is data.** `src/config/gameplay.ts` holds judgement windows, scoring, HP and duel timing.
-  `src/config/actions.ts` holds the action colours and labels, move timings and enemy types.
-  `src/config/visuals.ts` holds the palette, arena layout, camera, trails, and render scaling.
+  `src/config/actions.ts` holds the action colours and labels and enemy types.
+  `src/config/heroAnimation.ts` holds the hero's move clips, hit reaction and blend timings.
+  `src/config/visuals.ts` holds the palette, arena layout, camera, trails, sword effect amounts
+  (`SWORD_FX`), enemy hit reactions and render scaling.
 - **The demo song** (`audio/demo/composition.ts`) is pure data, and its drums are the chart:
   every kick is a BLOCK, every clap a SLASH, every rim tick a STAB and every crash a FLOURISH in the
   normal chart, and the easy chart is a subset of those hits. The same event list renders the audio
@@ -212,17 +223,19 @@ or paste the JSON with live validation, and playtest in the game.
 
 ## Synth → sword
 
-| Synth param | Effect (live in this build)                                                                                                                                |
-| ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| WT POS      | morphs SLASH and FLOURISH arcs (sine smooth → triangle linear → saw snappy and wide → square stepped) and the STAB thrust curve                            |
-| UNISON      | echo blades follow every slash, stab and flourish, and fan out as a shield on BLOCK. Builds ECHO PARRY charges: one charge saves you from one missed block |
-| DETUNE      | spreads the echo blades in angle and time, and boosts parry charge gain                                                                                    |
-| CUTOFF      | blade reach and glow, and STAB lunge distance                                                                                                              |
-| RES         | crit score bonus on PERFECT slashes, stabs and flourishes                                                                                                  |
-| (music)     | with the INSTRUMENTS mapping the same patch voices the song's lead and the SLASH accent                                                                    |
-| LFO / ENV   | data model only, not wired up yet                                                                                                                          |
+| Synth param | Effect (live in this build)                                                                                                             |
+| ----------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| WT POS      | slightly widens or narrows SLASH and FLOURISH arcs and sets the follow-through snap (saw snappy, sine smooth) and trail jitter (square) |
+| UNISON      | faint echo afterimages of the blade around each strike. Builds ECHO PARRY charges: one charge saves you from one missed block           |
+| DETUNE      | spreads the echo afterimages in angle and time, and boosts parry charge gain                                                            |
+| CUTOFF      | slight blade length, materia-slot glow, and STAB lunge distance                                                                         |
+| RES         | crit score bonus on PERFECT slashes, stabs and flourishes                                                                               |
+| (music)     | with the INSTRUMENTS mapping the same patch voices the song's lead and the SLASH accent                                                 |
+| LFO / ENV   | data model only, not wired up yet                                                                                                       |
 
-Presets are on the panel. The patch persists in localStorage.
+Presets are on the panel. The patch persists in localStorage. Every visual effect is scaled by
+`SWORD_FX` in `src/config/visuals.ts`, so the sword stays readable; the blade itself only glows on a
+connect.
 
 ## Stack notes
 

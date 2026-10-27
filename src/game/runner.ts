@@ -178,6 +178,7 @@ export class PlayRunner {
   applySettings(s: Settings): void {
     this.settings = s;
     this.engine.userOffsetSec = s.audioOffsetMs / 1000;
+    this.arena.visualOffset = s.visualOffsetMs / 1000;
     this.engine.output.gain.cancelScheduledValues(0);
     this.engine.output.gain.value = s.musicVolume;
     this.sfx.volume = s.hitsoundVolume;
