@@ -44,6 +44,11 @@ export interface CompEvent {
   vowel?: Vowel;
   /** Set on cue onsets: the action, hold length, and whether easy keeps it. */
   chart?: { action: Action; length?: number; easy: boolean };
+  /**
+   * Song beat of the cue this event sounds, on every event a cue plays (the onset plus its roll,
+   * chop phrase or crash). Keysound modes strip these from the stems and play them on hits.
+   */
+  cueBeat?: number;
 }
 
 export const DEMO_BPM = 155;
@@ -278,6 +283,7 @@ export function composeSong(spec: SongSpec): CompEvent[] {
           ? { glideFrom: prev808 }
           : {}),
         chart: cueFor(h),
+        cueBeat: b0 + h.beat,
       });
       prev808 = root;
     });
@@ -299,7 +305,7 @@ export function composeSong(spec: SongSpec): CompEvent[] {
         len: Math.min(1, next - beat) * 0.9,
         midi: [tone + (s === 'drop2' && bar >= 56 ? 12 : 0)],
         vel: cue ? 0.95 : 0.7,
-        ...(cue ? { chart: cueFor(cue) } : {}),
+        ...(cue ? { chart: cueFor(cue), cueBeat: b0 + beat } : {}),
       });
     });
 
@@ -332,6 +338,7 @@ export function composeSong(spec: SongSpec): CompEvent[] {
           midi: [],
           vel: 1,
           chart: cueFor(h),
+          cueBeat: b0 + h.beat,
         });
       } else {
         // glitchy roll: 32nds (or triplet 16ths in the drops) rising in velocity and pitch
@@ -346,9 +353,18 @@ export function composeSong(spec: SongSpec): CompEvent[] {
             midi: [k],
             vel: 0.55 + (k / n) * 0.45,
             ...(k === 0 ? { chart: cueFor(h) } : {}),
+            cueBeat: b0 + h.beat,
           });
         }
-        add({ inst: 'blip', part: 'perc', beat: b0 + h.beat, len: 0.1, midi: [96 + ci], vel: 0.6 });
+        add({
+          inst: 'blip',
+          part: 'perc',
+          beat: b0 + h.beat,
+          len: 0.1,
+          midi: [96 + ci],
+          vel: 0.6,
+          cueBeat: b0 + h.beat,
+        });
       }
     }
 
@@ -365,9 +381,18 @@ export function composeSong(spec: SongSpec): CompEvent[] {
           vel: k === 3 ? 1 : 0.85,
           vowel,
           ...(k === 0 ? { chart: cueFor(h) } : {}),
+          cueBeat: b0 + h.beat,
         });
       });
-      add({ inst: 'impact', part: 'backing', beat: b0 + h.beat, len: 4, midi: [], vel: 0.9 });
+      add({
+        inst: 'impact',
+        part: 'backing',
+        beat: b0 + h.beat,
+        len: 4,
+        midi: [],
+        vel: 0.9,
+        cueBeat: b0 + h.beat,
+      });
     }
 
     // ---- backing: pads, glassy bell arp, risers, glitch fills

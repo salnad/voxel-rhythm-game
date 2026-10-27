@@ -12,7 +12,7 @@ import type { GameSession } from '../game/session';
 import type { LaneInput } from '../rhythm/input';
 import { buildCharacter, type CharacterRig } from './character';
 import { Rings, Voxels } from './effects';
-import { buildEnemy, poseEnemy, type EnemyRig } from './enemy';
+import { buildEnemy, poseEnemy, type EnemyPoseInput, type EnemyRig } from './enemy';
 import { FloatingText } from './floatingText';
 import { HeroAnimator, type Anticipation } from './heroAnimator';
 import { Highway3D } from './highway3d';
@@ -88,6 +88,8 @@ export class ArenaView {
   pressMove: ((lane: number) => Action | null) | null = null;
   /** Camera placement override. */
   view: CameraView | null = null;
+  private enemyPoseFilter: ((pose: EnemyPoseInput, encounter: number) => EnemyPoseInput) | null =
+    null;
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
@@ -190,6 +192,14 @@ export class ArenaView {
   /** Run a callback every frame after the scene is posed, just before it renders. */
   onBeforeRender(fn: (t: number, dt: number) => void): void {
     this.beforeRender.push(fn);
+  }
+
+  /**
+   * Rewrite the on-stage enemy's pose input every frame (null to stop), e.g. to make it perform
+   * an experiment's own phrase instead of telegraphing the next cue.
+   */
+  setEnemyPoseFilter(fn: ((pose: EnemyPoseInput, encounter: number) => EnemyPoseInput) | null) {
+    this.enemyPoseFilter = fn;
   }
 
   /** The hero's rig (read-only use: anchor effects to it). */
@@ -530,7 +540,7 @@ export class ArenaView {
       const enc = tel.encounter;
       const rig = this.rigFor(enc);
       showing.add(enc);
-      poseEnemy(rig, {
+      const pose: EnemyPoseInput = {
         t,
         beatPhase: phase,
         enterAge: tel.enterAge,
@@ -543,7 +553,8 @@ export class ArenaView {
           outcome: duel.outcome(tel.last.noteId),
         },
         exit: exitOf(enc),
-      });
+      };
+      poseEnemy(rig, this.enemyPoseFilter ? this.enemyPoseFilter(pose, enc) : pose);
       if (!this.showEnemyIcon) rig.icon.visible = false;
       rig.root.position.z = -ARENA.duelDistance + (rig.root.userData.fwd as number);
       // the previous enemy finishes its exit while the next walks in

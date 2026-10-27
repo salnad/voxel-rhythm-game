@@ -116,44 +116,7 @@ export async function renderSongStems(
   bitcrush(dry.perc, 2, 8, 0.35);
 
   const kicks = events.filter((e) => e.inst === 'k808').map((e) => T(e.beat));
-  const busFx: Record<Part, (ctx: OfflineAudioContext, input: AudioNode, out: AudioNode) => void> =
-    {
-      k808: (ctx, input, out) => {
-        const g = ctx.createGain();
-        g.gain.value = 0.22;
-        input.connect(makeShaper(ctx, 3.5)).connect(g).connect(out);
-      },
-      perc: (ctx, input, out) => {
-        const g = ctx.createGain();
-        g.gain.value = 0.75;
-        input.connect(makeShaper(ctx, 1.6)).connect(g).connect(out);
-      },
-      vox: (ctx, input, out) => {
-        const g = ctx.createGain();
-        g.gain.value = 0.95;
-        input.connect(g).connect(out);
-        const d = ctx.createDelay(1);
-        d.delayTime.value = spb * 0.75;
-        const fb = ctx.createGain();
-        fb.gain.value = 0.3;
-        const wet = ctx.createGain();
-        wet.gain.value = 0.25;
-        g.connect(d).connect(fb).connect(d);
-        d.connect(wet).connect(out);
-      },
-      lead: (ctx, input, out) => leadBus(ctx, input, out, spb),
-      backing: (ctx, input, out) => {
-        const duck = ctx.createGain();
-        for (const k of kicks) sidechain(duck.gain, k);
-        const g = ctx.createGain();
-        g.gain.value = 0.6;
-        input
-          .connect(makeShaper(ctx, 1.2, 64))
-          .connect(duck)
-          .connect(g)
-          .connect(out);
-      },
-    };
+  const busFx = partBuses(spb, kicks);
 
   const stems = {} as Stems;
   await Promise.all(
@@ -167,6 +130,119 @@ export async function renderSongStems(
     }),
   );
   return stems;
+}
+
+type PartBus = (ctx: OfflineAudioContext, input: AudioNode, out: AudioNode) => void;
+
+/** Each stem's bus effects (drive, delay, sidechain from `kicks`, in seconds). */
+function partBuses(spb: number, kicks: readonly number[]): Record<Part, PartBus> {
+  return {
+    k808: (ctx, input, out) => {
+      const g = ctx.createGain();
+      g.gain.value = 0.22;
+      input.connect(makeShaper(ctx, 3.5)).connect(g).connect(out);
+    },
+    perc: (ctx, input, out) => {
+      const g = ctx.createGain();
+      g.gain.value = 0.75;
+      input.connect(makeShaper(ctx, 1.6)).connect(g).connect(out);
+    },
+    vox: (ctx, input, out) => {
+      const g = ctx.createGain();
+      g.gain.value = 0.95;
+      input.connect(g).connect(out);
+      const d = ctx.createDelay(1);
+      d.delayTime.value = spb * 0.75;
+      const fb = ctx.createGain();
+      fb.gain.value = 0.3;
+      const wet = ctx.createGain();
+      wet.gain.value = 0.25;
+      g.connect(d).connect(fb).connect(d);
+      d.connect(wet).connect(out);
+    },
+    lead: (ctx, input, out) => leadBus(ctx, input, out, spb),
+    backing: (ctx, input, out) => {
+      const duck = ctx.createGain();
+      for (const k of kicks) sidechain(duck.gain, k);
+      const g = ctx.createGain();
+      g.gain.value = 0.6;
+      input
+        .connect(makeShaper(ctx, 1.2, 64))
+        .connect(duck)
+        .connect(g)
+        .connect(out);
+    },
+  };
+}
+
+/**
+ * Render groups of events as one-shot buffers (keysounds): each group's events, with beats
+ * relative to the group's start, through the same voices and part buses as the stems (minus
+ * the backing sidechain), summed into one stereo buffer. Identical groups share a buffer.
+ */
+export async function renderOneShots(
+  groups: readonly (readonly CompEvent[])[],
+  bpm: number,
+  sampleRate = 44100,
+  leadPatch = SONG_LEAD_PATCH,
+): Promise<AudioBuffer[]> {
+  const spb = 60 / bpm;
+  const busFx = partBuses(spb, []);
+  const voices = new Map<string, Promise<AudioBuffer>>();
+  const voice = (e: CompEvent) => {
+    const key = voiceKey(e);
+    let v = voices.get(key);
+    if (!v) {
+      v = renderVoice(e, spb, sampleRate, leadPatch);
+      voices.set(key, v);
+    }
+    return v;
+  };
+  const byKey = new Map<string, Promise<AudioBuffer>>();
+  const render = async (group: readonly CompEvent[]): Promise<AudioBuffer> => {
+    const placed = await Promise.all(group.map(async (e) => ({ e, v: await voice(e) })));
+    const end = Math.max(0.1, ...placed.map(({ e, v }) => e.beat * spb + v.duration));
+    const frames = Math.ceil((end + spb * 2) * sampleRate);
+    const scratch = new OfflineAudioContext(2, 1, sampleRate);
+    const dry = new Map<Part, AudioBuffer>();
+    for (const { e, v } of placed) {
+      let mix = dry.get(e.part);
+      if (!mix) {
+        mix = scratch.createBuffer(2, frames, sampleRate);
+        dry.set(e.part, mix);
+      }
+      const at = Math.round(e.beat * spb * sampleRate);
+      for (let ch = 0; ch < 2; ch++) {
+        const src = v.getChannelData(Math.min(ch, v.numberOfChannels - 1));
+        const dst = mix.getChannelData(ch);
+        const n = Math.min(src.length, frames - at);
+        for (let i = 0; i < n; i++) dst[at + i]! += src[i]! * e.vel;
+      }
+    }
+    const vox = dry.get('vox');
+    if (vox) bitcrush(vox, 3, 7, 0.65);
+    const perc = dry.get('perc');
+    if (perc) bitcrush(perc, 2, 8, 0.35);
+    const ctx = new OfflineAudioContext(2, frames, sampleRate);
+    for (const [part, buf] of dry) {
+      const src = ctx.createBufferSource();
+      src.buffer = buf;
+      busFx[part](ctx, src, ctx.destination);
+      src.start(0);
+    }
+    return ctx.startRendering();
+  };
+  return Promise.all(
+    groups.map((g) => {
+      const key = g.map((e) => `${e.part}|${e.beat}|${e.vel}|${voiceKey(e)}`).join(';');
+      let p = byKey.get(key);
+      if (!p) {
+        p = render(g);
+        byKey.set(key, p);
+      }
+      return p;
+    }),
+  );
 }
 
 /** The lead bus: light drive and a dotted-eighth stereo delay. Shared with the live lead. */
