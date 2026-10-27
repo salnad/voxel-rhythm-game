@@ -150,6 +150,7 @@ export class PlayRunner {
         engine: this.engine,
         audio: ctx,
         sfx,
+        rain,
         settings,
         keys,
         autoplay: opts.autoplay,
@@ -246,6 +247,7 @@ export class PlayRunner {
         const m = map ? map(i, t) : i;
         if (m) inputs.push(m);
       }
+      if (this.runtime.pollInputs) inputs.push(...this.runtime.pollInputs(t));
       if (this.auto) inputs.push(...this.auto.due(t));
       inputs.sort((a, b) => a.time - b.time);
       this.session.step(inputs, t);

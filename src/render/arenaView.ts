@@ -220,6 +220,16 @@ export class ArenaView {
     this.anim.connect(action, false);
   }
 
+  /**
+   * Play a hero move outside the judge (experiments that swallow inputs and resolve them
+   * themselves): it connects at song time `contactAt` (the input timebase, like
+   * `LaneInput.time`); `hit` adds the impact pose.
+   */
+  playMove(action: Action, contactAt: number, hit = false): void {
+    this.anim.start(action, contactAt + this.visualOffset, this.session.mods);
+    if (hit) this.anim.connect(action, false);
+  }
+
   /** Freeze the hero's and enemy's poses for `seconds` from `at` (impact hit-stop). */
   hitStop(seconds: number, at = this.now): void {
     this.stopFrom = at;
@@ -310,7 +320,7 @@ export class ArenaView {
     const at = i.time + this.visualOffset;
     if (i.down) {
       this.pressAt[i.lane] = this.now;
-      if (move) this.anim.start(move, at, this.session.mods);
+      if (move) this.anim.start(move, (i.moveAt ?? i.time) + this.visualOffset, this.session.mods);
     } else {
       this.anim.release(at);
     }
