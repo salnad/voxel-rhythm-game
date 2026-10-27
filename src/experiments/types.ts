@@ -52,7 +52,10 @@ export interface ExperimentOptions {
   prompts?: boolean;
   /** Judgement window overrides (half-widths in seconds). */
   windows?: Partial<JudgementWindows>;
-  /** Force an action → music mapping (a MUSIC_MAPPINGS key) instead of the player's choice. */
+  /**
+   * Force an action → music mapping (a MUSIC_MAPPINGS key) instead of the player's choice, or
+   * NO_MUSIC_LAYER ('none') when the experiment's runtime voices the moves itself.
+   */
   musicMapping?: string;
   /** Cue lead time in seconds at cue speed 1.0 (default APPROACH_SECONDS). */
   approachSeconds?: number;
@@ -63,6 +66,9 @@ export interface ExperimentOptions {
   /** Short key legend shown in the how-to card, e.g. "A S D F" or "SPACE". */
   keyLegend?: string;
 }
+
+/** `options.musicMapping` value for no action → music layer (the runtime makes all move sounds). */
+export const NO_MUSIC_LAYER = 'none';
 
 /** What an experiment's runtime can reach. Treat session state as read-only. */
 export interface ExperimentContext {

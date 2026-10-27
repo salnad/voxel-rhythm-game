@@ -187,7 +187,7 @@ const lab = new PlaytestLab({
 });
 
 function musicMappingLabel(key: string): string {
-  return MUSIC_MAPPINGS[key]?.label ?? key;
+  return MUSIC_MAPPINGS[key]?.label ?? (key === 'none' ? 'EXPERIMENT AUDIO' : key);
 }
 
 function bindMappingSelector(el: HTMLElement) {

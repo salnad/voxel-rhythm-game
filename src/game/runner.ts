@@ -6,7 +6,7 @@ import { APPROACH_SECONDS, AUTOPLAY, JUDGEMENT_WINDOWS } from '../config/gamepla
 import { musicMapping } from '../config/musicMapping';
 import { CAMERA } from '../config/visuals';
 import type { Settings } from '../core/settings';
-import type { Experiment, ExperimentRuntime } from '../experiments/types';
+import { NO_MUSIC_LAYER, type Experiment, type ExperimentRuntime } from '../experiments/types';
 import { ArenaView } from '../render/arenaView';
 import { FxFeedback } from '../render/fxFeedback';
 import { HudOverlay } from '../render/hudOverlay';
@@ -96,13 +96,17 @@ export class PlayRunner {
       prompts: xo.prompts ?? true,
     });
     this.approachBase = xo.approachSeconds ?? APPROACH_SECONDS;
-    this.layer = musicMapping(xo.musicMapping ?? settings.musicMapping).create({
-      ctx,
-      engine: this.engine,
-      sfx,
-      chart,
-      session: this.session,
-    });
+    const mapping = xo.musicMapping ?? settings.musicMapping;
+    this.layer =
+      mapping === NO_MUSIC_LAYER
+        ? {}
+        : musicMapping(mapping).create({
+            ctx,
+            engine: this.engine,
+            sfx,
+            chart,
+            session: this.session,
+          });
     const stage = els.arenaCanvas.parentElement;
     this.fx = this.layer.meter && stage ? new FxFeedback(stage, els.arenaCanvas, keys) : null;
 

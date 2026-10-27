@@ -7,6 +7,9 @@ import { approachRing } from './approachRing';
 import { baseline } from './baseline';
 import { converge } from './converge';
 import { oneLane, oneLaneStrip } from './oneLane';
+import { byEar } from './byEar';
+import { callResponse } from './callResponse';
+import { keysound } from './keysound';
 import { parry } from './parry';
 import { tells } from './tells';
 import type { Experiment } from './types';
@@ -21,6 +24,9 @@ export const EXPERIMENTS: readonly Experiment[] = [
   oneLaneStrip,
   converge,
   approachRing,
+  keysound,
+  callResponse,
+  byEar,
 ];
 
 export function experimentByKey(key: string | null | undefined): Experiment | null {

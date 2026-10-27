@@ -4,12 +4,19 @@
  * all of them.
  */
 import {
+  CR_BPM,
+  CR_LENGTH_BEATS,
+  CR_SONG_NAME,
+  composeCallResponse,
+} from './demo/callResponseSong';
+import {
   composeDemo,
   composeSong,
   DEMO_BPM,
   DEMO_LENGTH_BEATS,
   type CompEvent,
 } from './demo/composition';
+import { withoutCues } from './demo/keysounds';
 import { LAB_BPM, LAB_LENGTH_BEATS, LAB_SONG } from './demo/labSong';
 
 export interface ProceduralSong {
@@ -18,6 +25,9 @@ export interface ProceduralSong {
   lengthBeats: number;
   compose(): CompEvent[];
 }
+
+/** LAB.EXE without its cue notes: the keysound experiment's backing (hits play the notes). */
+export const LAB_KEYSOUND_SONG = 'lab-140-keysound';
 
 export const SONGS: Record<string, ProceduralSong> = {
   'digicore-demo': {
@@ -31,6 +41,18 @@ export const SONGS: Record<string, ProceduralSong> = {
     bpm: LAB_BPM,
     lengthBeats: LAB_LENGTH_BEATS,
     compose: () => composeSong(LAB_SONG),
+  },
+  [LAB_KEYSOUND_SONG]: {
+    title: 'LAB.EXE (keysounds)',
+    bpm: LAB_BPM,
+    lengthBeats: LAB_LENGTH_BEATS,
+    compose: () => withoutCues(composeSong(LAB_SONG)),
+  },
+  [CR_SONG_NAME]: {
+    title: 'ECHO.EXE',
+    bpm: CR_BPM,
+    lengthBeats: CR_LENGTH_BEATS,
+    compose: () => withoutCues(composeCallResponse()),
   },
 };
 
