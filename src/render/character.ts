@@ -117,18 +117,18 @@ export function buildCharacter(): CharacterRig {
   const legOf = (side: number) => {
     // bone groups point their +Y from joint to joint (set by IK each frame)
     const thigh = new THREE.Group();
-    thigh.add(bone(0.12, 0.15, RIG.thigh, outfit, 6));
+    thigh.add(bone(0.13, 0.16, RIG.thigh, outfit, 6));
     const shin = new THREE.Group();
-    shin.add(bone(0.085, 0.135, RIG.shin, outfitDark, 6));
-    const knee = chamferBox(0.2, 0.08, 0.2, outfitDark);
+    shin.add(bone(0.09, 0.145, RIG.shin, outfitDark, 6));
+    const knee = chamferBox(0.22, 0.08, 0.22, outfitDark);
     shin.add(knee);
     const foot = new THREE.Group();
-    const cuff = chamferBox(0.2, 0.09, 0.22, leather);
+    const cuff = chamferBox(0.22, 0.1, 0.24, leather);
     cuff.position.set(0, 0.06, 0);
-    const boot = box(0.18, 0.11, 0.3, metalDark, 0, -0.025, 0.04);
-    const toe = chamferBox(0.17, 0.07, 0.12, metalDark, 0.8);
-    toe.position.set(0, -0.04, 0.19);
-    const sole = box(0.19, 0.03, 0.32, dark, 0, -0.07, 0.05);
+    const boot = box(0.2, 0.12, 0.32, metalDark, 0, -0.025, 0.04);
+    const toe = chamferBox(0.19, 0.08, 0.13, metalDark, 0.8);
+    toe.position.set(0, -0.04, 0.2);
+    const sole = box(0.21, 0.03, 0.34, dark, 0, -0.07, 0.05);
     foot.add(cuff, boot, toe, sole);
     foot.position.x = side * 0.005;
     model.add(thigh, shin, foot);
@@ -152,7 +152,7 @@ export function buildCharacter(): CharacterRig {
   const belt = chamferBox(0.47, 0.08, 0.31, leather);
   belt.position.y = 0.08;
   const buckle = box(0.1, 0.07, 0.03, metal, 0, 0.08, 0.16);
-  const chest = chamferBox(0.44, 0.4, 0.28, outfit, 1.12);
+  const chest = chamferBox(0.46, 0.38, 0.29, outfit, 1.14);
   chest.position.y = 0.32;
   const strapL = box(0.07, 0.4, 0.03, leather, 0.11, 0.33, 0.165);
   strapL.rotation.z = -0.08;
@@ -186,26 +186,26 @@ export function buildCharacter(): CharacterRig {
   const neck = bone(0.07, 0.08, 0.1, skin, 6);
   neck.position.y = -0.04;
   head.add(neck);
-  const skull = chamferBox(0.56, 0.48, 0.5, skin, 0.94);
+  const skull = chamferBox(0.6, 0.5, 0.52, skin, 0.94);
   skull.position.y = 0.3;
   head.add(skull);
   const jaw = chamferBox(0.38, 0.12, 0.34, skin, 1.25);
   jaw.position.set(0, 0.06, 0.04);
   head.add(jaw);
   for (const side of [-1, 1]) {
-    const eye = box(0.1, 0.11, 0.02, eyes, side * 0.12, 0.27, 0.25);
-    const brow = box(0.14, 0.03, 0.03, hairDark, side * 0.12, 0.36, 0.255);
+    const eye = box(0.1, 0.11, 0.02, eyes, side * 0.125, 0.27, 0.265);
+    const brow = box(0.14, 0.03, 0.03, hairDark, side * 0.125, 0.36, 0.27);
     brow.rotation.z = side * -0.18;
-    const ear = box(0.04, 0.1, 0.08, skin, side * 0.29, 0.26, 0.02);
+    const ear = box(0.04, 0.1, 0.08, skin, side * 0.31, 0.26, 0.02);
     head.add(eye, brow, ear);
   }
-  head.add(box(0.07, 0.015, 0.02, dark, 0, 0.13, 0.25));
-  head.add(chamferBox(0.6, 0.18, 0.54, hair, 0.85).translateY(0.55).translateZ(-0.02));
+  head.add(box(0.07, 0.015, 0.02, dark, 0, 0.13, 0.265));
+  head.add(chamferBox(0.64, 0.18, 0.56, hair, 0.85).translateY(0.55).translateZ(-0.02));
   // x, y, z, pitch (back sweep), roll (side splay), radius, length
   const spikes: Array<[number, number, number, number, number, number, number]> = [
-    [0, 0.62, -0.02, -0.55, 0, 0.15, 0.5],
-    [0.17, 0.6, 0.02, -0.4, -0.65, 0.13, 0.46],
-    [-0.17, 0.6, 0.02, -0.4, 0.65, 0.13, 0.46],
+    [0, 0.62, -0.02, -0.85, 0, 0.15, 0.48],
+    [0.17, 0.6, 0.02, -0.62, -0.7, 0.13, 0.44],
+    [-0.17, 0.6, 0.02, -0.62, 0.7, 0.13, 0.44],
     [0.27, 0.48, 0.04, -0.15, -1.2, 0.11, 0.42],
     [-0.27, 0.48, 0.04, -0.15, 1.2, 0.11, 0.42],
     [0.1, 0.56, -0.18, -1.05, -0.35, 0.13, 0.46],
@@ -388,10 +388,10 @@ function buildSword(
  */
 function glove(dark: THREE.Material, leather: THREE.Material, metal: THREE.Material): THREE.Group {
   const g = new THREE.Group();
-  g.add(chamferBox(0.13, 0.13, 0.14, dark));
+  g.add(chamferBox(0.15, 0.14, 0.15, dark));
   const rings = [dark, leather, metal];
   rings.forEach((m, i) => {
-    const r = chamferBox(0.16 - i * 0.005, 0.045, 0.16 - i * 0.005, m);
+    const r = chamferBox(0.18 - i * 0.006, 0.05, 0.18 - i * 0.006, m);
     r.rotation.x = Math.PI / 2;
     r.position.set(0, 0, -0.06 - i * 0.042);
     g.add(r);

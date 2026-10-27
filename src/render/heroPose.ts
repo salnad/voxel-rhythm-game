@@ -209,9 +209,16 @@ export function sampleClip(clip: MoveClip, u: number, base: HeroPose, out: HeroP
 export function clipTime(
   clip: MoveClip,
   age: number,
-  opts: { hit: boolean; holding: boolean; releasedAge: number | null; followScale: number },
+  opts: {
+    hit: boolean;
+    holding: boolean;
+    releasedAge: number | null;
+    followScale: number;
+    /** Hit-stop multiplier (shorter in fast chains). Default 1. */
+    stopScale?: number;
+  },
 ): number {
-  const stop = opts.hit ? clip.hitStop : 0;
+  const stop = opts.hit ? clip.hitStop * (opts.stopScale ?? 1) : 0;
   if (opts.holding) return Math.min(clip.hold, Math.max(0, age - stop));
   if (opts.releasedAge !== null)
     return clip.hold + Math.max(0, opts.releasedAge) * opts.followScale;

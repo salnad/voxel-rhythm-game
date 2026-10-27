@@ -8,6 +8,7 @@ import { RIG, type CharacterRig } from './character';
 import { Trail } from './effects';
 import {
   CHANNELS,
+  clamp01,
   clipTime,
   copyPose,
   groupOf,
@@ -63,6 +64,10 @@ interface Play {
   releasedAt: number | null;
   /** Displayed pose when the move started; the body blends out of it. */
   from: HeroPose;
+  /** The clip's contact frame (fast chains shrink the move toward it). */
+  contact: HeroPose;
+  /** 0 = pressed right after the previous move (fast chain), 1 = relaxed tempo. */
+  pace: number;
 }
 
 interface Echo {
@@ -153,7 +158,21 @@ export class HeroAnimator {
     const clip = this.clipFor(action, true);
     const from = copyPose(this.pose, makePose());
     from.bodyYaw = wrapAngle(from.bodyYaw);
-    this.play = { action, clip, start: t, hit: false, holding: false, releasedAt: null, from };
+    const contact = sampleClip(clip, 0, READY_POSE, makePose());
+    this.shape(action, contact, mods);
+    const A = HERO_ANIM;
+    const pace = clamp01((t - this.lastPress - A.fastInterval) / (A.slowInterval - A.fastInterval));
+    this.play = {
+      action,
+      clip,
+      start: t,
+      hit: false,
+      holding: false,
+      releasedAt: null,
+      from,
+      contact,
+      pace,
+    };
     this.lastPress = t;
     this.lastSample = t;
     this.trail.setColor(ACTION_SPECS[action].color, 0, 0.6);
@@ -195,12 +214,18 @@ export class HeroAnimator {
   }
 
   private playClipTime(p: Play, t: number, mods: AttackModifiers): number {
+    const fast = 1 - p.pace;
     return clipTime(p.clip, t - p.start, {
       hit: p.hit,
       holding: p.holding,
       releasedAge: p.releasedAt === null ? null : t - p.releasedAt,
-      followScale: this.followRate(mods),
+      followScale: this.followRate(mods) * (1 + fast * HERO_ANIM.fastFollowBoost),
+      stopScale: 1 - fast * (1 - HERO_ANIM.fastStopScale),
     });
+  }
+
+  private stopTime(p: Play): number {
+    return p.clip.hitStop * (1 - (1 - p.pace) * (1 - HERO_ANIM.fastStopScale));
   }
 
   /** Synth shaping applied to a sampled move pose. */
@@ -220,6 +245,9 @@ export class HeroAnimator {
     const u = this.playClipTime(p, t, mods);
     sampleClip(p.clip, u, READY_POSE, out);
     this.shape(p.action, out, mods);
+    // fast chains: smaller follow-through, staying near the contact frame
+    const damp = (1 - p.pace) * HERO_ANIM.fastDamp * (1 - smoothstep(u / p.clip.end));
+    if (damp > 0) lerpPose(out, p.contact, damp, out);
     const age = t - p.start;
     const b = HERO_ANIM.blendIn;
     for (const c of CHANNELS) {
@@ -246,7 +274,7 @@ export class HeroAnimator {
     else copyPose(READY_POSE, pose);
 
     // anticipation: coil toward the upcoming cue's wind-up
-    if (ant && !(p && (p.holding || t - p.start < p.clip.hitStop))) {
+    if (ant && !(p && (p.holding || t - p.start < this.stopTime(p)))) {
       const clip = this.clipFor(ant.action, false);
       const window = Math.min(clip.anticipation, ant.gap * HERO_ANIM.anticipationGapFraction);
       let w = 0;
@@ -265,6 +293,8 @@ export class HeroAnimator {
     const breath = Math.sin(t * TAU * HERO_ANIM.breathHz);
     pose.spinePitch += breath * HERO_ANIM.breathDepth;
     pose.handY += breath * HERO_ANIM.breathDepth * 0.5;
+    pose.leftY += breath * HERO_ANIM.breathDepth * 0.6 * idle;
+    pose.handZ += Math.sin(t * TAU * HERO_ANIM.breathHz * 0.5 + 1) * HERO_ANIM.breathDepth * idle;
     pose.pelvisY -= HERO_ANIM.beatBob * bob * idle;
     pose.swordYaw += Math.sin(t * TAU * HERO_ANIM.breathHz * 0.5) * HERO_ANIM.swordSway * idle;
 
@@ -279,7 +309,7 @@ export class HeroAnimator {
       pose.swordYaw += Math.sin(t * TAU * HERO_ANIM.lockTrembleHz) * HERO_ANIM.lockTremble;
       pose.handZ += Math.sin(t * TAU * HERO_ANIM.lockTrembleHz * 0.7) * HERO_ANIM.lockTremble * 0.3;
     }
-    if (p?.hit && t - p.start < p.clip.hitStop) {
+    if (p?.hit && t - p.start < this.stopTime(p)) {
       const s = HERO_ANIM.hitStopShake;
       pose.handX += Math.sin(t * 610) * s;
       pose.handY += Math.cos(t * 470) * s;

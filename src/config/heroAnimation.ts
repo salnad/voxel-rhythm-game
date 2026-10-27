@@ -262,9 +262,9 @@ const stab: MoveClip = {
       pose: {
         spineYaw: 0.26,
         spinePitch: 0.22,
-        pelvisY: -0.12,
-        pelvisZ: 0.22,
-        footLZ: 0.24,
+        pelvisY: -0.14,
+        pelvisZ: 0.3,
+        footLZ: 0.34,
         handX: -0.1,
         handY: 0.33,
         handZ: 0.5,
@@ -281,9 +281,9 @@ const stab: MoveClip = {
       pose: {
         spineYaw: 0.28,
         spinePitch: 0.24,
-        pelvisY: -0.12,
-        pelvisZ: 0.24,
-        footLZ: 0.24,
+        pelvisY: -0.14,
+        pelvisZ: 0.32,
+        footLZ: 0.34,
         handX: -0.1,
         handY: 0.33,
         handZ: 0.52,
@@ -301,8 +301,8 @@ const stab: MoveClip = {
         spineYaw: -0.02,
         spinePitch: 0.1,
         pelvisY: -0.06,
-        pelvisZ: 0.1,
-        footLZ: 0.12,
+        pelvisZ: 0.12,
+        footLZ: 0.16,
         handX: -0.24,
         handY: 0.26,
         handZ: 0.3,
@@ -401,11 +401,12 @@ const block: MoveClip = {
   hold: 0.05,
   hitStop: 0.045,
   end: 0.36,
-  cut: [0, 0],
+  // the guard rising draws a short smear; nothing after contact
+  cut: [-0.1, 0],
 };
 
 const flourish: MoveClip = {
-  // rising cut on contact, a full spinning cut in the air, land in a low finishing pose
+  // rising cut on the right on contact, a full spinning cut in the air, land in a low finish
   keys: [
     {
       t: -0.16,
@@ -415,10 +416,10 @@ const flourish: MoveClip = {
         spinePitch: 0.22,
         handX: -0.32,
         handY: 0.12,
-        handZ: 0.14,
-        swordYaw: -1.2,
+        handZ: 0.16,
+        swordYaw: -0.9,
         swordPitch: -0.62,
-        swordRoll: 0.6,
+        swordRoll: 0.4,
         leftX: 0.22,
         leftY: 0.28,
         leftZ: 0.3,
@@ -428,14 +429,14 @@ const flourish: MoveClip = {
       t: 0,
       pose: {
         pelvisY: -0.04,
-        spineYaw: 0.08,
+        spineYaw: -0.08,
         spinePitch: 0.04,
-        handX: -0.08,
-        handY: 0.46,
+        handX: -0.2,
+        handY: 0.42,
         handZ: 0.38,
-        swordYaw: 0.2,
-        swordPitch: 0.95,
-        swordRoll: 0.6,
+        swordYaw: -0.25,
+        swordPitch: 0.85,
+        swordRoll: 0.4,
         leftX: 0.3,
         leftY: 0.2,
         leftZ: 0.0,
@@ -446,13 +447,13 @@ const flourish: MoveClip = {
       pose: {
         pelvisY: 0.12,
         bodyYaw: 0.9,
-        spineYaw: 0.35,
-        handX: -0.06,
-        handY: 0.56,
-        handZ: 0.22,
-        swordYaw: 0.3,
-        swordPitch: 1.3,
-        swordRoll: 0.6,
+        spineYaw: 0.2,
+        handX: -0.36,
+        handY: 0.52,
+        handZ: 0.2,
+        swordYaw: -0.95,
+        swordPitch: 0.95,
+        swordRoll: 0.4,
         footLLift: 0.08,
         footRLift: 0.1,
         leftX: 0.32,
@@ -466,7 +467,7 @@ const flourish: MoveClip = {
         pelvisY: 0.22,
         bodyYaw: 3.6,
         spineYaw: 0.1,
-        handX: -0.4,
+        handX: -0.42,
         handY: 0.4,
         handZ: 0.12,
         swordYaw: -1.55,
@@ -551,9 +552,21 @@ export const HIT_REACT: Key[] = [
       swordPitch: 0.3,
       leftY: 0.1,
       leftZ: -0.08,
+      footLLift: 0.06,
     },
   },
-  { t: 0.16, pose: { spinePitch: -0.16, spineRoll: 0.06, pelvisZ: -0.08, pelvisY: -0.04 } },
+  {
+    t: 0.16,
+    pose: {
+      spinePitch: -0.16,
+      spineRoll: 0.06,
+      pelvisZ: -0.1,
+      pelvisY: -0.05,
+      footLZ: -0.12,
+      footRZ: -0.04,
+    },
+  },
+  { t: 0.3, pose: { spinePitch: -0.05, pelvisZ: -0.04, footLZ: -0.06 } },
   { t: 0.42, pose: {} },
 ];
 
@@ -575,4 +588,15 @@ export const HERO_ANIM = {
   lockTrembleHz: 38,
   /** Hit-stop jitter on the blade during the freeze (world units). */
   hitStopShake: 0.012,
+  /**
+   * Fast chains. Pace goes from 0 (presses `fastInterval` apart or closer) to 1 (`slowInterval`
+   * or more). At pace 0 the hit-stop shrinks to `fastStopScale`, the follow-through plays
+   * `fastFollowBoost` faster, and arcs shrink toward the contact pose by `fastDamp`, so
+   * 16ths read as a tight flurry instead of full swings.
+   */
+  fastInterval: 0.09,
+  slowInterval: 0.28,
+  fastStopScale: 0.3,
+  fastFollowBoost: 0.7,
+  fastDamp: 0.45,
 };
