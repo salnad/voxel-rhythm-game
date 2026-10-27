@@ -23,8 +23,8 @@ export interface Framing {
 
 /** Closer over-the-shoulder shot: the enemy fills the middle, the hero in the foreground. */
 export const DUEL_CLOSEUP: Framing = {
-  position: [2.3, 4.9, 4.6],
-  lookAt: [-0.3, 1.15, -3.0],
+  position: [2.1, 4.5, 4.1],
+  lookAt: [-0.28, 1.3, -3.0],
   fov: 40,
 };
 
