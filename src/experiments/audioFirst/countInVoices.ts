@@ -24,7 +24,7 @@ export class CountInVoices {
   readonly bus: GainNode;
   private noise: AudioBuffer | null = null;
 
-  constructor(private readonly ctx: AudioContext) {
+  constructor(private readonly ctx: BaseAudioContext) {
     this.bus = ctx.createGain();
   }
 
@@ -52,11 +52,12 @@ export class CountInVoices {
         const bp = this.ctx.createBiquadFilter();
         bp.type = 'bandpass';
         bp.Q.value = 2.5;
-        bp.frequency.setValueAtTime(350, at);
-        bp.frequency.exponentialRampToValueAtTime(7000, at + dur);
+        bp.frequency.setValueAtTime(500, at);
+        bp.frequency.exponentialRampToValueAtTime(8000, at + dur);
         const g = this.ctx.createGain();
         g.gain.setValueAtTime(0.0001, at);
-        g.gain.exponentialRampToValueAtTime(0.75, at + dur - 0.01);
+        g.gain.linearRampToValueAtTime(0.09, at + 0.03);
+        g.gain.exponentialRampToValueAtTime(0.8, at + dur - 0.01);
         g.gain.linearRampToValueAtTime(0, at + dur);
         n.connect(bp).connect(g).connect(this.bus);
         n.loop = true;
@@ -74,7 +75,8 @@ export class CountInVoices {
         lp.frequency.exponentialRampToValueAtTime(5000, at + dur);
         const og = this.ctx.createGain();
         og.gain.setValueAtTime(0.0001, at);
-        og.gain.exponentialRampToValueAtTime(0.16, at + dur - 0.01);
+        og.gain.linearRampToValueAtTime(0.03, at + 0.03);
+        og.gain.exponentialRampToValueAtTime(0.18, at + dur - 0.01);
         og.gain.linearRampToValueAtTime(0, at + dur);
         o.connect(lp).connect(og).connect(this.bus);
         o.start(at);
@@ -85,8 +87,8 @@ export class CountInVoices {
       case 'tick': {
         const m = (step === 0 ? chord[2] : chord[chord.length - 1])! + 12;
         for (const [ratio, lvl, dec] of [
-          [1, 0.55, 0.045],
-          [2.76, 0.18, 0.02],
+          [1, 0.75, 0.06],
+          [2.76, 0.22, 0.025],
         ] as const) {
           const o = this.ctx.createOscillator();
           o.frequency.value = mtof(m) * ratio;
@@ -100,14 +102,14 @@ export class CountInVoices {
       }
       case 'three': {
         nodes.push(this.noiseBurst(at, 'highpass', 4200, 0.2, 0.05, 0.8));
-        const f0 = mtof(chord[chord.length - 1]!);
-        nodes.push(...this.voice(at + 0.04, dur, f0, VOWELS.r, 0.42, 1, VOWELS.ee, 0.06));
+        const f0 = mtof(chord[chord.length - 1]! - 12);
+        nodes.push(...this.voice(at + 0.04, dur, f0, VOWELS.r, 0.7, 1, VOWELS.ee, 0.07));
         break;
       }
       case 'two': {
         nodes.push(this.noiseBurst(at, 'highpass', 3000, 0.35, 0.018, 1));
-        const f0 = mtof(chord[chord.length - 2]!);
-        nodes.push(...this.voice(at + 0.012, dur, f0, VOWELS.oo, 0.5, 1));
+        const f0 = mtof(chord[chord.length - 2]! - 12);
+        nodes.push(...this.voice(at + 0.012, dur, f0, VOWELS.oo, 0.6, 1));
         break;
       }
     }

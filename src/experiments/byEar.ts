@@ -30,9 +30,9 @@ interface Pending {
 }
 
 function createByEar(x: ExperimentContext): ExperimentRuntime {
-  const { audio, engine, session, chart, arena, camera, keys } = x;
+  const { audio, engine, session, chart, arena, camera, keys, sfx } = x;
   const spb = 60 / chart.tempo.bpmAtBeat(0);
-  const limiter = insertMasterLimiter(engine, audio);
+  const limiter = insertMasterLimiter(engine, audio, sfx);
   const voices = new CountInVoices(audio);
   const level = audio.createGain();
   level.gain.value = 0.9;
@@ -145,8 +145,10 @@ function createByEar(x: ExperimentContext): ExperimentRuntime {
           c.shadowBlur = 10;
           c.fillText(keyLabel(keys[lane] ?? ''), at.x + 62, at.y - 6);
           c.shadowBlur = 0;
-          c.font = 'bold 14px monospace';
-          c.fillText(SOUND_NAME[a.cue.action], at.x, at.y - 52);
+          c.font = 'bold 15px monospace';
+          c.textAlign = 'right';
+          c.fillText(SOUND_NAME[a.cue.action], at.x - 48, at.y - 6);
+          c.textAlign = 'center';
           c.globalAlpha = 1;
         }
         if (beat > BY_EAR_TEACH_UNTIL_BEAT - 4) {

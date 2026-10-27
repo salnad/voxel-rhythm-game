@@ -35,8 +35,8 @@ export const keysound: Experiment = {
   options: { musicMapping: NO_MUSIC_LAYER, keyLegend: 'A S D F' },
   chart: keysoundChart,
   create: (x: ExperimentContext) => {
-    const { audio, engine, session, chart, arena, camera } = x;
-    const limiter = insertMasterLimiter(engine, audio);
+    const { audio, engine, session, chart, arena, camera, sfx } = x;
+    const limiter = insertMasterLimiter(engine, audio, sfx);
     const player = new KeysoundPlayer(audio);
     player.bus.connect(engine.musicBus);
     void player.load(

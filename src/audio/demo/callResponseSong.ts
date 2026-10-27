@@ -39,7 +39,7 @@ export const CR_ENEMIES: readonly CallEnemy[] = [
   { enemy: 'duelist', name: 'DUELIST', section: 'build',
     phrases: ['T...T...', 'B.T.B...', 'B.S.T...', 'S.T.F...'] },
   { enemy: 'knight', name: 'KNIGHT', section: 'drop1',
-    phrases: ['B.B.S...', 'T.S.B...', 'B..SB.T.', 'S.T.B.F.'] },
+    phrases: ['B.B.S...', 'T.S.B...', 'B..SB.T.', 'S.TBF...'] },
   { enemy: 'brute', name: 'DAEMON', section: 'drop2',
     phrases: ['B.STB...', 'S.S.TB..', 'BT.S.B..', 'B.S.T.F.'] },
 ];

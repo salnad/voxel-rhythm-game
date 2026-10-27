@@ -46,8 +46,8 @@ export function exchangeAt(
 }
 
 function createCallResponse(c: ExperimentContext) {
-  const { audio, engine, session, chart, arena, camera, keys } = c;
-  const limiter = insertMasterLimiter(engine, audio);
+  const { audio, engine, session, chart, arena, camera, keys, sfx } = c;
+  const limiter = insertMasterLimiter(engine, audio, sfx);
   const player = new KeysoundPlayer(audio);
   player.bus.connect(engine.musicBus);
   void player.load(`${CR_SONG_NAME}:answers`, cueGroups(composeCallResponse()), CR_BPM);
@@ -107,14 +107,14 @@ function createCallResponse(c: ExperimentContext) {
     onStrayPress(session, (lane) => player.ghost(ACTIONS[lane] ?? 'block')),
   ];
 
-  const drawStrip = (ctx: CanvasRenderingContext2D, t: number, w: number, h: number) => {
+  const drawStrip = (ctx: CanvasRenderingContext2D, t: number, w: number) => {
     const beat = session.conductor.beatAt(t);
     const { phase, x, frac } = exchangeAt(beat, CR_EXCHANGES);
     if (phase === 'outro') return;
     const sw = Math.min(520, w * 0.46);
     const sh = 54;
     const x0 = w / 2 - sw / 2;
-    const y0 = h - 150;
+    const y0 = 50;
     const call = phase === 'call';
     const accent = call ? PALETTE.danger : PALETTE.green;
     ctx.fillStyle = 'rgba(0,10,4,0.62)';
@@ -190,7 +190,7 @@ function createCallResponse(c: ExperimentContext) {
       ctx.globalAlpha = 1 - k;
       ctx.font = `bold ${Math.round(22 + 8 * (1 - k))}px monospace`;
       ctx.fillStyle = PALETTE.white;
-      ctx.fillText('ECHO!', w / 2, y0 - 22 - 14 * k);
+      ctx.fillText('ECHO!', w / 2, y0 + sh + 24 + 14 * k);
       ctx.globalAlpha = 1;
     }
   };
@@ -212,7 +212,7 @@ function createCallResponse(c: ExperimentContext) {
     },
     drawHud: (ctx: CanvasRenderingContext2D, t: number, w: number, h: number) => {
       juice.drawFlash(ctx, t, w, h);
-      drawStrip(ctx, t, w, h);
+      drawStrip(ctx, t, w);
       const p = performing(t, 0.45);
       const at = arena.enemyScreen();
       if (p && at) {
