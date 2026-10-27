@@ -123,7 +123,9 @@ keyboard / touch / autoplay
   vocal and backing stems; audio-file maps are one "mix" stem), each through its own gain node.
   Stems play continuously while measures follow each other, and crossfade-jump to a measure's offset
   when it repeats. A failed combo triggers the wonky FX (bitcrush, pitch wobble, stutter gate,
-  tape-stop) until the bar line; the next measure always resyncs.
+  tape-stop) until the bar line; the next measure always resyncs. Music and sound effects share one
+  master limiter with a soft clip (`audio/master.ts`, gain staging in `config/mix.ts`), so the sum
+  never clips.
 - **Action → music layer** (`audio/musicLayers.ts`, registry in `config/musicMapping.ts`). How moves
   interact with the song is a swappable layer that listens to session events and drives the engine's
   part gains, its music bus or its own sounds. Settings → "actions → music" picks one:
@@ -134,10 +136,19 @@ keyboard / touch / autoplay
     lead is synthesized live by your wavetable patch, so synth settings change how SLASH sounds.
   - **SWORD SFX**: moves make sword sounds and the song plays as written.
   - **B · PRODUCER FX** (`?mapping=fx`, `audio/fx/`, tuning in `config/productionFx.ts`): each move is a mix-wide
-    effect, locked to the cue's beat. BLOCK pumps the mix like a sidechain, SLASH slams a resonant
-    low-pass shut and sweeps it open, STAB beat-repeats the 1/16 after the cue, FLOURISH pitch-rises
-    the whole mix (plus a noise riser) into the next bar line. A miss plays the effect fumbled: a
-    mushy double duck, a jammed honking filter, off-grid decaying repeats, a riser that stalls.
+    effect, locked to the cue's beat. BLOCK pumps the mix like a sidechain (-20 dB, recovering across
+    the beat), SLASH slams a resonant low-pass shut and sweeps it open over 1.5 beats, STAB
+    beat-repeats the 1/16 after the cue as a roll that accelerates into the next beat, FLOURISH
+    pitch-rises the whole mix up to an octave (plus a noise riser and a high-pass) and drops out for a
+    1/16 just before the bar line. The slam comes with the key press even though the audio is heard
+    late; the release stays on the grid. A miss plays the effect fumbled: a mushy double duck, a
+    jammed honking filter, off-grid decaying repeats, a riser that stalls. You see it too
+    (`render/fxFeedback.ts`, drawn from the same envelopes the audio follows): the arena and highway
+    pump and dim with the duck, blur and close behind an iris with the filter, repeat the frame on
+    every stutter slice, and lift and glow gold with the riser, flashing on the snap. The FX RACK
+    (bottom right) shows each effect's key, its live value and the grade of the move that fired it.
+    `node scripts/fx-audit/run.mjs` (with `npm run dev` and Chrome on port 9222) renders the demo
+    offline and measures how long and how deep each effect changes the music against the dry song.
 - **Audio clock** (`audio/musicEngine.ts`, `core/clockSync.ts`). Game time is the timeline position
   the player is _hearing_: AudioContext time (via `getOutputTimestamp`, falling back to
   `currentTime - outputLatency`), smoothed against `performance.now()`, minus the user's audio offset.
