@@ -29,6 +29,9 @@ export interface LabHost {
   build: string;
 }
 
+const sameKeys = (a: readonly string[], b: readonly string[]) =>
+  a.length === b.length && a.every((k) => b.includes(k));
+
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
 
 /** Seconds per trial spent outside play: the how-to card plus rating. */
@@ -65,9 +68,10 @@ export class PlaytestLab {
     this.active = false;
     this.host.offScreen();
     const st = this.state;
-    const inProgress = st && !isComplete(st);
+    const stale = !!st && !sameKeys(st.order, this.keys());
+    const inProgress = !!st && !stale && !isComplete(st);
     const done = st?.trials.length ?? 0;
-    const order = st?.order ?? this.keys();
+    const order = st && !stale ? st.order : this.keys();
     const el = this.host.show(`
       <h1>PLAYTEST LAB</h1>
       <div class="sub">${EXPERIMENTS.length} gameplay experiments, one short trial each, about ${this.estimateMinutes(order)} minutes in total.</div>
@@ -81,16 +85,23 @@ export class PlaytestLab {
         At the end, <b>COPY RESULTS</b> and paste the JSON into chat.</div>
       </div>
       ${inProgress ? `<div class="sub">In progress: trial ${st.index + 1} of ${st.order.length} (${done} rated).</div>` : ''}
+      ${stale ? `<div class="sub">Your saved run (${done} rated) is from a version with different experiments. RESULTS still shows it; START begins a new run with all ${EXPERIMENTS.length}.</div>` : ''}
       <div style="margin-top:12px">
         ${inProgress ? '<button class="big" id="l-resume">RESUME</button>' : ''}
-        <button class="big" id="l-start">${st ? 'START OVER' : 'START'}</button>
+        <button class="big" id="l-start">${st && !stale ? 'START OVER' : 'START'}</button>
         ${done ? '<button class="big" id="l-results">RESULTS</button>' : ''}
         <button class="big" id="l-cal">CALIBRATE OFFSET</button>
         <button class="big" id="l-back">BACK</button>
       </div>`);
     el.querySelector<HTMLButtonElement>('#l-resume')?.addEventListener('click', () => this.next());
     el.querySelector<HTMLButtonElement>('#l-start')!.onclick = () => {
-      if (st && st.trials.length && !confirm('Start over? Your saved Lab ratings will be cleared.'))
+      if (
+        st &&
+        st.trials.length &&
+        !confirm(
+          'Start a new run? Your saved Lab ratings will be cleared (copy them from RESULTS first).',
+        )
+      )
         return;
       clearLab();
       this.state = newLabState(
