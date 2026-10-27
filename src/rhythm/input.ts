@@ -14,6 +14,7 @@ export class KeyboardLanes {
   private readonly queue: LaneInput[] = [];
   private readonly held = new Set<number>();
   private keys: string[] = [];
+  private altKeys: string[] = [];
   private readonly onDown = (e: KeyboardEvent) => this.handle(e, true);
   private readonly onUp = (e: KeyboardEvent) => this.handle(e, false);
 
@@ -22,8 +23,10 @@ export class KeyboardLanes {
     window.addEventListener('keyup', this.onUp);
   }
 
-  setKeys(keys: string[]): void {
+  /** Key codes per lane, plus an optional second binding per lane. */
+  setKeys(keys: string[], altKeys: string[] = []): void {
     this.keys = keys;
+    this.altKeys = keys.length ? altKeys : [];
     this.held.clear();
   }
 
@@ -49,7 +52,8 @@ export class KeyboardLanes {
   }
 
   private handle(e: KeyboardEvent, down: boolean): void {
-    const lane = this.keys.indexOf(e.code);
+    let lane = this.keys.indexOf(e.code);
+    if (lane < 0) lane = this.altKeys.indexOf(e.code);
     if (lane < 0) return;
     e.preventDefault();
     if (e.repeat) return;

@@ -53,6 +53,8 @@ export interface ExperimentOptions {
   approachSeconds?: number;
   /** Key codes for the 4 lanes, overriding the player's preset (e.g. arrows). */
   keys?: string[];
+  /** A second key code per lane that also works (e.g. arrows next to A S D F). */
+  altKeys?: string[];
   /** Short key legend shown in the how-to card, e.g. "A S D F" or "SPACE". */
   keyLegend?: string;
 }
