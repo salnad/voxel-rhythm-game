@@ -80,6 +80,8 @@ export interface ExperimentContext {
   engine: MusicEngine;
   audio: AudioContext;
   sfx: Sfx;
+  /** The background digital rain: `pulse(amount)` brightens and speeds it up briefly. */
+  rain: { pulse(amount?: number): void };
   settings: Settings;
   /** The effective lane keys (after `options.keys`). */
   keys: readonly string[];
@@ -92,6 +94,11 @@ export interface ExperimentRuntime {
    * nearest cue). Return null to swallow it. Autoplay inputs bypass this.
    */
   mapInput?(input: LaneInput, t: number): LaneInput | null;
+  /**
+   * Inputs the runtime adds this frame (presses it held back in mapInput and now releases,
+   * scripted moves). They reach the judge as-is, in time order with the keyboard's.
+   */
+  pollInputs?(t: number): LaneInput[];
   /** Every frame, after the arena has posed the scene and before it renders. */
   update?(t: number, dt: number, approach: number): void;
   /** Every frame, after the HUD overlay has drawn (CSS pixel coordinates). */

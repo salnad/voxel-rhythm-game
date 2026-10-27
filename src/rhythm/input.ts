@@ -4,6 +4,8 @@ export interface LaneInput {
   down: boolean;
   time: number;
   auto?: boolean;
+  /** Song time the hero's move should connect, when an experiment retimes it (default: now). */
+  moveAt?: number;
 }
 
 /**

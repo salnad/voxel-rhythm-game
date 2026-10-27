@@ -6,12 +6,15 @@
 import { approachRing } from './approachRing';
 import { baseline } from './baseline';
 import { converge } from './converge';
+import { freestyle } from './freestyle';
+import { onBeat } from './onBeat';
 import { oneLane, oneLaneStrip } from './oneLane';
 import { byEar } from './byEar';
 import { callResponse } from './callResponse';
 import { keysound } from './keysound';
 import { parry } from './parry';
 import { tells } from './tells';
+import { twoButton } from './twoButton';
 import type { Experiment } from './types';
 
 export const BASELINE_KEY = 'baseline';
@@ -27,6 +30,9 @@ export const EXPERIMENTS: readonly Experiment[] = [
   keysound,
   callResponse,
   byEar,
+  onBeat,
+  twoButton,
+  freestyle,
 ];
 
 export function experimentByKey(key: string | null | undefined): Experiment | null {
