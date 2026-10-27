@@ -43,6 +43,15 @@ URL flags (handy for demos and tests): `?map=demo&autostart=1` starts the demo s
 music mapping from `MUSIC_MAPPINGS` for that page load without changing the saved choice (the
 main menu's ACTIONS → MUSIC selector saves it).
 
+## Gameplay experiments and the Playtest Lab
+
+The main menu lists **gameplay experiments**: alternative mechanics and presentations (no lanes,
+cues on the enemy, audio-only cues, on-beat assist and more), each a switchable mode on the same
+pipeline, playing the same short test song (`LAB.EXE`, 140 BPM, about a minute). Open one with
+`?exp=<key>`. The **PLAYTEST LAB** (`?lab=1`) runs every experiment once (baseline first, the rest
+shuffled), each after a 10-second how-to, and asks for four 1-5 ratings plus a note; COPY RESULTS
+exports compact JSON. See [docs/experiments.md](docs/experiments.md) for how to add one.
+
 ## Playtest hub
 
 Every version is playable in the browser at **https://salnad.github.io/voxel-rhythm-game/**:

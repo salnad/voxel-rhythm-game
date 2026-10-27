@@ -1,4 +1,5 @@
-import { mixStems, renderDemoStems } from '../audio/demo/render';
+import { mixStems, renderSongStems } from '../audio/demo/render';
+import { SONGS, songEvents } from '../audio/songs';
 import { buildChart, type Chart } from '../chart/build';
 import type { ChartFile } from '../chart/types';
 import { parseChartText, validateChart } from '../chart/validate';
@@ -28,25 +29,20 @@ export class MapLoadError extends Error {
 
 const proceduralCache = new Map<string, Promise<Record<string, AudioBuffer>>>();
 
-/** Built-in procedural songs, by `audio.procedural` name. They render to stems. */
-const PROCEDURAL: Record<string, () => Promise<Record<string, AudioBuffer>>> = {
-  'digicore-demo': () => renderDemoStems(),
-};
-
 /** A procedural song mixed down to one buffer (editor preview). */
 export async function proceduralMix(name: string): Promise<AudioBuffer> {
   return mixStems(await proceduralSong(name));
 }
 
 export function proceduralSong(name: string): Promise<Record<string, AudioBuffer>> {
-  const make = PROCEDURAL[name];
-  if (!make)
+  const song = SONGS[name];
+  if (!song)
     throw new MapLoadError(
-      `Unknown procedural song "${name}". Known: ${Object.keys(PROCEDURAL).join(', ')}`,
+      `Unknown procedural song "${name}". Known: ${Object.keys(SONGS).join(', ')}`,
     );
   let p = proceduralCache.get(name);
   if (!p) {
-    p = make();
+    p = renderSongStems(songEvents(name)!, song.bpm, song.lengthBeats);
     proceduralCache.set(name, p);
   }
   return p;

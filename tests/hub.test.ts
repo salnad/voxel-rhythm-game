@@ -125,13 +125,20 @@ describe('renderIndex', () => {
     const html = renderIndex(
       [
         version('main', { subject: 'Merge #2: <b> Co-authored-by: Someone <a@b.c>' }),
-        version('pr-3', { title: 'Effects & "hybrid"', url: 'https://x/pull/3' }),
+        version('pr-3', {
+          title: 'Effects & "hybrid"',
+          url: 'https://x/pull/3',
+          experiments: [{ key: 'one-lane', label: 'ONE LANE', description: 'one lane' }],
+        }),
         version('pr-1', { status: 'archived', closedAt: '2026-10-26T00:00:00Z' }),
       ],
       REPO,
       '2026-10-26T21:30:00Z',
     );
     expect(html).toContain('href="pr-3/?mapping=sword"');
+    expect(html).toContain('href="pr-3/?exp=one-lane"');
+    expect(html).toContain('href="pr-3/?lab=1"');
+    expect(html).not.toContain('href="main/?lab=1"');
     expect(html).toContain('Effects &#38; &#34;hybrid&#34;');
     expect(html).toContain('Merge #2: &#60;b&#62;</span>');
     expect(html).toContain('title="Sword &#60;sounds&#62;"');

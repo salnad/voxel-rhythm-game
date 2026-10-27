@@ -17,8 +17,21 @@ const LABEL: Record<Judgement, string> = {
   miss: 'MISS',
 };
 
+/** HUD switches (experiments turn parts of the default HUD off). */
+export interface HudOptions {
+  /** Key/action boxes along the bottom. Default true. */
+  laneLabels?: boolean;
+  /** COMBO / RETRY tags drawn on the highway. Default true. */
+  comboTags?: boolean;
+  /** Chart prompts. Default true. */
+  prompts?: boolean;
+}
+
 /** Screen-space layer over the arena: lane key labels, judgement, combo, prompts, banners. */
 export class HudOverlay {
+  /** Extra drawing after the HUD each frame (CSS pixels). */
+  extraDraw: ((ctx: CanvasRenderingContext2D, t: number, w: number, h: number) => void) | null =
+    null;
   private readonly ctx: CanvasRenderingContext2D;
   private judgementText: { j: Judgement; offset: number; at: number } | null = null;
   private comboBanner: { e: ComboEvent; at: number } | null = null;
@@ -30,6 +43,7 @@ export class HudOverlay {
     private readonly session: GameSession,
     private readonly arena: ArenaView,
     private readonly keys: readonly string[],
+    private readonly opts: HudOptions = {},
   ) {
     this.ctx = canvas.getContext('2d')!;
     session.bus.on('judgement', (e) => this.onJudgement(e));
@@ -60,11 +74,11 @@ export class HudOverlay {
     ctx.textBaseline = 'middle';
 
     const lanes = this.arena.laneScreen();
-    this.drawLaneLabels(lanes, W, H);
+    if (this.opts.laneLabels ?? true) this.drawLaneLabels(lanes, W, H);
     this.drawJudgement(t, lanes, W);
     this.drawCombo(lanes, W);
-    this.drawComboTags(t, approach);
-    this.drawPrompt(t, W, H);
+    if (this.opts.comboTags ?? true) this.drawComboTags(t, approach);
+    if (this.opts.prompts ?? true) this.drawPrompt(t, W, H);
     this.drawEnemyBanner(t, W);
     this.drawComboBanner(t, W, H);
     this.drawTimingBar(W, H);
@@ -76,6 +90,7 @@ export class HudOverlay {
     ctx.fillRect(0, 0, W, 3);
     ctx.fillStyle = PALETTE.green;
     ctx.fillRect(0, 0, W * p, 3);
+    this.extraDraw?.(ctx, t, W, H);
   }
 
   private drawLaneLabels(lanes: { xs: number[]; y: number; width: number }, _W: number, H: number) {

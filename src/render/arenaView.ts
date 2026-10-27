@@ -17,6 +17,14 @@ import { HeroAnimator } from './heroAnimator';
 import { Highway3D } from './highway3d';
 
 const UP = new THREE.Vector3(0, 1, 0);
+
+/** Presentation switches (experiments turn parts of the default view off). */
+export interface ArenaOptions {
+  /** Draw the 4-lane floor highway. Default true. */
+  highway?: boolean;
+  /** Show the next-action icon over the enemy's head. Default true. */
+  enemyIcon?: boolean;
+}
 const TOWARD_ENEMY = new THREE.Vector3(0, 0, -1);
 
 /**
@@ -25,7 +33,7 @@ const TOWARD_ENEMY = new THREE.Vector3(0, 0, -1);
  */
 export class ArenaView {
   private readonly renderer: THREE.WebGLRenderer;
-  private readonly scene = new THREE.Scene();
+  readonly scene = new THREE.Scene();
   readonly camera: THREE.PerspectiveCamera;
   private readonly hero: CharacterRig;
   private readonly anim: HeroAnimator;
@@ -46,13 +54,19 @@ export class ArenaView {
   private flashColor = new THREE.Color();
   private lastGrindSpark = 0;
   private readonly walkIn: number;
+  private readonly beforeRender: Array<(t: number, dt: number) => void> = [];
+  private readonly showHighway: boolean;
+  private readonly showEnemyIcon: boolean;
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
     labelLayer: HTMLElement,
     private readonly chart: Chart,
     private readonly session: GameSession,
+    opts: ArenaOptions = {},
   ) {
+    this.showHighway = opts.highway ?? true;
+    this.showEnemyIcon = opts.enemyIcon ?? true;
     this.renderer = new THREE.WebGLRenderer({
       canvas,
       antialias: false,
@@ -86,6 +100,7 @@ export class ArenaView {
     this.scene.add(grid);
 
     this.highway = new Highway3D(this.scene, chart);
+    this.highway.group.visible = this.showHighway;
     const n = chart.lanes.length;
     this.held = new Array<boolean>(n).fill(false);
     this.pressAt = new Array<number>(n).fill(-10);
@@ -138,6 +153,23 @@ export class ArenaView {
     const y = this.toScreen(this.highway.receptorPoint(0)).y;
     const width = xs.length > 1 ? Math.abs(xs[1]! - xs[0]!) : 100;
     return { xs, y, width };
+  }
+
+  /** Run a callback every frame after the scene is posed, just before it renders. */
+  onBeforeRender(fn: (t: number, dt: number) => void): void {
+    this.beforeRender.push(fn);
+  }
+
+  /** The hero's rig (read-only use: anchor effects to it). */
+  get heroRig(): CharacterRig {
+    return this.hero;
+  }
+
+  /** The rig of the enemy on stage (walking in, fighting or exiting), or null. */
+  enemyRig(): EnemyRig | null {
+    const k = this.session.duel.activeEncounter(this.now);
+    const rig = k === null ? undefined : this.enemyRigs.get(k);
+    return rig && rig.root.visible ? rig : null;
   }
 
   /** Screen point above the enemy on stage, or null. */
@@ -216,8 +248,10 @@ export class ArenaView {
     if (a.kind !== 'holdEnd') {
       this.hitAt[a.lane] = this.now;
       this.anim.connect(a.action, a.hold);
-      const p = this.highway.receptorPoint(a.lane);
-      this.rings.spawn(p.setY(0.06), ACTION_SPECS[a.action].color, UP, 0.22, 0.7);
+      if (this.showHighway) {
+        const p = this.highway.receptorPoint(a.lane);
+        this.rings.spawn(p.setY(0.06), ACTION_SPECS[a.action].color, UP, 0.22, 0.7);
+      }
     }
     this.flashAt = this.now;
     this.flashColor.set(ACTION_SPECS[a.action].color);
@@ -372,6 +406,7 @@ export class ArenaView {
     this.camera.fov = baseFov - this.fovPulse;
     this.camera.updateProjectionMatrix();
 
+    for (const fn of this.beforeRender) fn(songTime, dt);
     this.renderer.render(this.scene, this.camera);
     this.labels.update(dt);
   }
@@ -423,6 +458,7 @@ export class ArenaView {
         },
         exit: exitOf(enc),
       });
+      if (!this.showEnemyIcon) rig.icon.visible = false;
       rig.root.position.z = -ARENA.duelDistance + (rig.root.userData.fwd as number);
       // the previous enemy finishes its exit while the next walks in
       const prev = enc - 1;

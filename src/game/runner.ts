@@ -1,14 +1,15 @@
 import { MusicEngine } from '../audio/musicEngine';
 import type { ActionMusicLayer } from '../audio/musicLayers';
 import type { Sfx } from '../audio/sfx';
-import { APPROACH_SECONDS, AUTOPLAY } from '../config/gameplay';
+import { APPROACH_SECONDS, AUTOPLAY, JUDGEMENT_WINDOWS } from '../config/gameplay';
 import { musicMapping } from '../config/musicMapping';
 import { CAMERA } from '../config/visuals';
 import type { Settings } from '../core/settings';
+import type { Experiment, ExperimentRuntime } from '../experiments/types';
 import { ArenaView } from '../render/arenaView';
 import { HudOverlay } from '../render/hudOverlay';
 import type { DigitalRain } from '../render/rain';
-import { AutoPlayer, KeyboardLanes } from '../rhythm/input';
+import { AutoPlayer, KeyboardLanes, type LaneInput } from '../rhythm/input';
 import type { SynthPatch } from '../synth/patch';
 import type { LoadedMap } from './maps';
 import { GameSession } from './session';
@@ -33,6 +34,8 @@ export interface RunnerOptions {
   autoplay: boolean;
   /** Bars where autoplay misses once on the first try (shows a failed combo + retry). */
   autoplayFailBars?: number[];
+  /** Gameplay experiment to run (src/experiments). */
+  experiment?: Experiment | null;
 }
 
 /** Drives one play: clock → inputs → session → music + views, once per animation frame. */
@@ -44,6 +47,8 @@ export class PlayRunner {
   private readonly keyboard: KeyboardLanes;
   private readonly layer: ActionMusicLayer;
   private readonly auto: AutoPlayer | null;
+  private readonly runtime: ExperimentRuntime;
+  private readonly approachBase: number;
   private raf = 0;
   private lastPerf = 0;
   private ended = false;
@@ -66,14 +71,28 @@ export class PlayRunner {
     private readonly hooks: RunnerHooks,
   ) {
     const chart = map.chart;
-    this.session = new GameSession(chart, { noFail: settings.noFail, patch });
+    const exp = opts.experiment ?? null;
+    const xo = exp?.options ?? {};
+    this.session = new GameSession(chart, {
+      noFail: settings.noFail,
+      patch,
+      windows: { ...JUDGEMENT_WINDOWS, ...xo.windows },
+    });
     this.engine = new MusicEngine(ctx, chart, map.stems);
-    const keys = settings.keys4;
+    const keys = xo.keys ?? settings.keys4;
     this.keyboard = new KeyboardLanes((perf) => this.engine.timeAt(perf));
-    this.keyboard.setKeys(opts.autoplay ? [] : keys);
-    this.arena = new ArenaView(els.arenaCanvas, els.labelLayer, chart, this.session);
-    this.hud = new HudOverlay(els.hudCanvas, chart, this.session, this.arena, keys);
-    this.layer = musicMapping(settings.musicMapping).create({
+    this.keyboard.setKeys(opts.autoplay ? [] : [...keys]);
+    this.arena = new ArenaView(els.arenaCanvas, els.labelLayer, chart, this.session, {
+      highway: xo.highway ?? true,
+      enemyIcon: xo.enemyIcon ?? true,
+    });
+    this.hud = new HudOverlay(els.hudCanvas, chart, this.session, this.arena, keys, {
+      laneLabels: xo.laneLabels ?? true,
+      comboTags: xo.highway ?? true,
+      prompts: xo.prompts ?? true,
+    });
+    this.approachBase = xo.approachSeconds ?? APPROACH_SECONDS;
+    this.layer = musicMapping(xo.musicMapping ?? settings.musicMapping).create({
       ctx,
       engine: this.engine,
       sfx,
@@ -111,6 +130,23 @@ export class PlayRunner {
         glitch();
       }
     });
+    this.runtime =
+      exp?.create?.({
+        scene: this.arena.scene,
+        camera: this.arena.camera,
+        arena: this.arena,
+        session: this.session,
+        chart,
+        engine: this.engine,
+        audio: ctx,
+        sfx,
+        settings,
+        keys,
+        autoplay: opts.autoplay,
+      }) ?? {};
+    const rt = this.runtime;
+    if (rt.update) this.arena.onBeforeRender((t, dt) => rt.update!(t, dt, this.approach()));
+    if (rt.drawHud) this.hud.extraDraw = (c, t, w, h) => rt.drawHud!(c, t, w, h);
     window.addEventListener('resize', this.onResize);
     els.hudCanvas.addEventListener('pointerdown', this.onPointer);
     els.hudCanvas.addEventListener('pointerup', this.onPointer);
@@ -126,6 +162,7 @@ export class PlayRunner {
       (window as unknown as Record<string, unknown>).__vr = {
         songTime: () => this.engine.timeAt(performance.now()),
         session: this.session,
+        experiment: this.opts.experiment?.key ?? null,
         camera: CAMERA,
         /** Everything the game plays, as a MediaStream (for recording demos without a sound card). */
         tapAudio: () => {
@@ -144,6 +181,11 @@ export class PlayRunner {
     this.engine.output.gain.cancelScheduledValues(0);
     this.engine.output.gain.value = s.musicVolume;
     this.sfx.volume = s.hitsoundVolume;
+  }
+
+  /** Cue lead time (s) at the current cue speed. */
+  approach(): number {
+    return this.approachBase / Math.max(0.25, this.settings.scrollSpeed);
   }
 
   setPatch(p: SynthPatch): void {
@@ -165,6 +207,7 @@ export class PlayRunner {
   stop(): void {
     cancelAnimationFrame(this.raf);
     this.engine.stop();
+    this.runtime.dispose?.();
     this.layer.dispose?.();
     this.keyboard.dispose();
     this.arena.dispose();
@@ -184,7 +227,12 @@ export class PlayRunner {
     this.engine.sampleClock(now);
     const t = this.engine.timeAt(now);
     if (this.engine.playing) {
-      const inputs = this.keyboard.drain();
+      const map = this.runtime.mapInput;
+      const inputs: LaneInput[] = [];
+      for (const i of this.keyboard.drain()) {
+        const m = map ? map(i, t) : i;
+        if (m) inputs.push(m);
+      }
       if (this.auto) inputs.push(...this.auto.due(t));
       inputs.sort((a, b) => a.time - b.time);
       this.session.step(inputs, t);
@@ -192,7 +240,7 @@ export class PlayRunner {
       this.layer.update?.(t);
     }
     const drawT = t + this.settings.visualOffsetMs / 1000;
-    const approach = APPROACH_SECONDS / Math.max(0.25, this.settings.scrollSpeed);
+    const approach = this.approach();
     this.arena.update(drawT, this.engine.playing ? dt : 0, realDt, approach);
     this.hud.draw(drawT, approach);
     this.rain.update(dt);
